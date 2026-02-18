@@ -1,0 +1,13 @@
+{
+  "name": "effect-prototype",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "effect": "^3.19.18"
+  }
+}
