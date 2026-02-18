@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { Counter } from "../components/Counter.tsx";
 import { WsStatus } from "../components/WsStatus.tsx";
 
@@ -10,10 +11,10 @@ export default function Home() {
         </h1>
       </header>
       <nav className="flex gap-4 mb-6 text-sm">
-        <a href="/" className="text-blue-400 hover:text-blue-300">Home</a>
-        <a href="/about" className="text-blue-400 hover:text-blue-300">About</a>
-        <a href="/projects/demo" className="text-blue-400 hover:text-blue-300">Project: demo</a>
-        <a href="/status" className="text-yellow-400 hover:text-yellow-300">Status</a>
+        <Link to="/" className="text-blue-400 hover:text-blue-300">Home</Link>
+        <Link to="/about" className="text-blue-400 hover:text-blue-300">About</Link>
+        <Link to="/projects/demo" className="text-blue-400 hover:text-blue-300">Project: demo</Link>
+        <Link to="/status" className="text-yellow-400 hover:text-yellow-300">Status</Link>
       </nav>
       <div className="grid grid-cols-2 gap-6">
         <Counter />

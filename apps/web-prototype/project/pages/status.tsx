@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router";
 
 export default function Status() {
   const [health, setHealth] = useState<{ status: string; uptime: number } | null>(null);
@@ -25,9 +26,9 @@ export default function Status() {
       ) : (
         <p className="text-zinc-500">Loading...</p>
       )}
-      <a href="/" className="text-emerald-400 hover:text-emerald-300 text-sm mt-6 inline-block">
+      <Link to="/" className="text-emerald-400 hover:text-emerald-300 text-sm mt-6 inline-block">
         &larr; Back home
-      </a>
+      </Link>
     </div>
   );
 }

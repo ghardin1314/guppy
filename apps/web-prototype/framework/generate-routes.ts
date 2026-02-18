@@ -1,7 +1,7 @@
 import { relative } from "path";
 import { mkdir } from "fs/promises";
 
-/** Convert a page file path to a Next.js-style route pattern. */
+/** Convert a page file path to a React Router path pattern. */
 function fileToPattern(filePath: string, pagesDir: string): string {
   let rel = relative(pagesDir, filePath)
     .replace(/\.(tsx|ts|jsx|js)$/, "")
@@ -10,6 +10,9 @@ function fileToPattern(filePath: string, pagesDir: string): string {
   // index files map to their parent directory
   if (rel === "index") return "/";
   if (rel.endsWith("/index")) rel = rel.slice(0, -"/index".length);
+
+  // Convert Next.js-style [param] to React Router :param
+  rel = rel.replace(/\[([^\]]+)\]/g, ":$1");
 
   return "/" + rel;
 }
@@ -30,20 +33,18 @@ export async function generateRoutes(projectDir: string) {
     // Sort deterministically — prevents unnecessary rewrites that break HMR.
     routes.sort((a, b) => a.pattern.localeCompare(b.pattern));
 
-    const imports: string[] = [];
     const entries: string[] = [];
-
     for (const { pattern, filePath } of routes) {
       const rel = "./" + relative(outDir, filePath);
-      const name = `Page_${imports.length}`;
-      imports.push(`import ${name} from "${rel}";`);
-      entries.push(`  { pattern: "${pattern}", component: ${name} },`);
+      entries.push(
+        `  { path: "${pattern}", lazy: () => import("${rel}").then(m => ({ Component: m.default })) },`
+      );
     }
 
     const content = `// AUTO-GENERATED — do not edit.
-${imports.join("\n")}
+import type { RouteObject } from "react-router";
 
-export const routes = [
+export const routes: RouteObject[] = [
 ${entries.join("\n")}
 ];
 

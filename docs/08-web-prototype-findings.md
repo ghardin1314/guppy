@@ -265,3 +265,65 @@ Alternative: `guppy start` generates a temp entry in `.guppy/start.ts`. Rejected
 - Hides what runs from the user
 - Can't customize server config (port, middleware) without extra abstraction
 - A visible `start.ts` is simpler and more transparent — same pattern as Remix's `server.ts`
+
+## React Router v7 Migration
+
+### Why
+
+The custom router (`framework/router.ts`) was ~40 lines of flat pathname matching. No nested routes, layouts, data loading, error boundaries, code splitting, or scroll restoration. React Router v7 data mode (`createBrowserRouter`) provides all of this with zero build-tool requirements — works with Bun's bundler as-is.
+
+### What Changed
+
+| File | Change |
+|------|--------|
+| `framework/router.ts` | **Deleted.** React Router handles all matching. |
+| `framework/generate-routes.ts` | Emits `RouteObject[]` with `lazy` imports instead of flat `{ pattern, component }` array. Converts `[slug]` → `:slug` (React Router syntax). |
+| `project/app.tsx` | `createBrowserRouter` + `RouterProvider` replaces manual `useState(pathname)` + `popstate` + click interception. Catch-all `*` route handles 404. |
+| `project/pages/projects/[slug].tsx` | `useParams()` hook instead of `params` prop. |
+| All page components | `<a href>` → `<Link to>` for client-side navigation. |
+
+### Generated Route Format
+
+`routes.gen.ts` now emits:
+
+```ts
+import type { RouteObject } from "react-router";
+
+export const routes: RouteObject[] = [
+  { path: "/", lazy: () => import("../pages/index.tsx").then(m => ({ Component: m.default })) },
+  { path: "/projects/:slug", lazy: () => import("../pages/projects/[slug].tsx").then(m => ({ Component: m.default })) },
+];
+```
+
+The `.then(m => ({ Component: m.default }))` wrapper maps each page's default export to React Router's expected `Component` key. This keeps page files simple — just `export default function Page()`.
+
+### Lazy Routes = Code Splitting
+
+Using `lazy` instead of static imports means each page is a separate chunk. The browser only downloads a page's code when navigating to it. This is free — React Router + Bun's bundler handle it with no extra config.
+
+### What Didn't Change
+
+- `framework/server.ts` — still serves `shell.html` as catch-all `/*`, API routing via `FileSystemRouter` unchanged
+- `project/start.ts`, `project/shell.html` — unchanged
+- Route generation mechanics — still `Bun.Glob` scan, deterministic sort, diff-before-write, `import.meta.hot.accept()`
+- HMR behavior — page edits still trigger client updates
+
+### What's Now Available
+
+With React Router v7 in place, these features are available without additional work:
+
+- **Nested routes / layouts** — add a route with `children` array
+- **Data loading** — export `loader` from a page file (React Router's `lazy` picks it up)
+- **Error boundaries** — export `ErrorBoundary` from a page file
+- **Scroll restoration** — add `<ScrollRestoration />` in the root layout
+- **Pending UI** — `useNavigation()` for loading states during lazy route transitions
+- **Route actions** — export `action` for form mutations
+
+### Framework Ownership Update
+
+`framework/router.ts` no longer exists. The framework now exports:
+
+| File | Export |
+|------|--------|
+| `server.ts` | `createServer(projectDir, shell)` |
+| `generate-routes.ts` | `generateRoutes(projectDir)` — writes `RouteObject[]` to `projectDir/.guppy/` |
