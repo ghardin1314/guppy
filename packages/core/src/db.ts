@@ -9,7 +9,7 @@
 import { SqliteClient, SqliteMigrator } from "@effect/sql-sqlite-bun";
 import { Migrator } from "@effect/sql";
 import { BunContext } from "@effect/platform-bun";
-import { Layer } from "effect";
+import { Layer, String as Str } from "effect";
 
 import migration0001 from "./migrations/0001_initial.ts";
 
@@ -31,7 +31,11 @@ const MigrationLayer = SqliteMigrator.layer({
  * eagerly so downstream services can assume tables exist.
  */
 export const makeDbLayer = (dbPath: string) => {
-  const ClientLayer = SqliteClient.layer({ filename: dbPath });
+  const ClientLayer = SqliteClient.layer({
+    filename: dbPath,
+    transformResultNames: Str.snakeToCamel,
+    transformQueryNames: Str.camelToSnake,
+  });
 
   return Layer.provideMerge(MigrationLayer, ClientLayer);
 };

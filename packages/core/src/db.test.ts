@@ -30,12 +30,12 @@ it.layer(DbTest)("db", (it) => {
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
-      const rows = yield* sql<{ migration_id: number; name: string }>`
+      const rows = yield* sql<{ migrationId: number; name: string }>`
         SELECT migration_id, name FROM _guppy_migrations ORDER BY migration_id
       `;
 
       expect(rows).toEqual([
-        { migration_id: 1, name: "initial" },
+        { migrationId: 1, name: "initial" },
       ]);
     })
   );
