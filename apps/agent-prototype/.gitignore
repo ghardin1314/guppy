@@ -1,0 +1,7 @@
+data.sqlite
+data.sqlite-wal
+data.sqlite-shm
+test-data.sqlite
+workspace/
+workspace-test/
+.env
