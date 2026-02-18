@@ -3,7 +3,9 @@
   "private": true,
   "workspaces": ["packages/*"],
   "devDependencies": {
+    "@effect/vitest": "^0.27.0",
     "@types/bun": "latest",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }
