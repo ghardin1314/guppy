@@ -1,6 +1,5 @@
 import { relative } from "path";
-
-const frameworkDir = import.meta.dir;
+import { mkdir } from "fs/promises";
 
 /** Convert a page file path to a Next.js-style route pattern. */
 function fileToPattern(filePath: string, pagesDir: string): string {
@@ -18,6 +17,8 @@ function fileToPattern(filePath: string, pagesDir: string): string {
 export async function generateRoutes(projectDir: string) {
   try {
     const pagesDir = `${projectDir}/pages`;
+    const outDir = `${projectDir}/.guppy`;
+    const outPath = `${outDir}/routes.gen.ts`;
     const glob = new Bun.Glob("**/*.{tsx,ts,jsx,js}");
 
     const routes: Array<{ pattern: string; filePath: string }> = [];
@@ -33,7 +34,7 @@ export async function generateRoutes(projectDir: string) {
     const entries: string[] = [];
 
     for (const { pattern, filePath } of routes) {
-      const rel = "./" + relative(frameworkDir, filePath);
+      const rel = "./" + relative(outDir, filePath);
       const name = `Page_${imports.length}`;
       imports.push(`import ${name} from "${rel}";`);
       entries.push(`  { pattern: "${pattern}", component: ${name} },`);
@@ -52,7 +53,7 @@ if (import.meta.hot) {
 }
 `;
 
-    const outPath = `${frameworkDir}/routes.gen.ts`;
+    await mkdir(outDir, { recursive: true });
     const existing = await Bun.file(outPath).text().catch(() => "");
     if (existing !== content) {
       await Bun.write(outPath, content);

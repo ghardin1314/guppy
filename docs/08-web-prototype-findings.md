@@ -205,3 +205,63 @@ Replaced `FileSystemRouter` in `generate-routes.ts` with `Bun.Glob` for page fil
 ### Likely Bun Bug
 
 The `FileSystemRouter` + HMR conflict is almost certainly a bug. FSR is documented as not having built-in file watching (`reload()` is manual), yet creating one interferes with the bundler's HMR file change detection for the same directory. The exact internal mechanism is unknown — possibly shared kqueue/inotify descriptors, a module registry collision, or a file stat cache conflict. Worth filing upstream.
+
+## Framework / Project Ownership Split
+
+### The Problem
+
+The prototype initially had `shell.html`, `app.tsx`, and `routes.gen.ts` all living in `framework/`. In production, `framework/` = `node_modules/guppy/` — an ephemeral, potentially read-only directory. Writing generated files there is wrong.
+
+Beyond `routes.gen.ts`, the HTML shell and app entry also need to be project-owned: users need to customize `<title>`, meta tags, favicon, 404 pages, layout wrappers, and context providers.
+
+### The Constraint
+
+Bun's bundler requires the HTML file to be a **static import** — `import shell from "./shell.html"`. The import path must be resolvable at compile time. This creates a chain:
+
+```
+start.ts → (static import) → shell.html → app.tsx → routes.gen.ts → pages/*.tsx
+```
+
+Since the framework can't know the project's path at publish time, `start.ts` must live in the project — not the framework.
+
+### Solution
+
+The project owns the entire client entry chain. Framework exports utilities only.
+
+**Project-owned (scaffolded by `guppy init`, user-editable):**
+
+| File | Purpose |
+|------|---------|
+| `start.ts` | Entry point. Static imports `shell.html`, calls `createServer()` |
+| `shell.html` | HTML shell. User customizes `<head>`, meta tags, fonts |
+| `app.tsx` | Client app. Routing, 404 page, layout, providers — all user-controlled |
+| `.guppy/routes.gen.ts` | Generated route manifest (gitignored) |
+| `pages/`, `routes/`, `components/`, `styles/` | User code |
+
+**Framework-owned (= `node_modules/guppy/` in production):**
+
+| File | Export |
+|------|--------|
+| `server.ts` | `createServer(projectDir, shell)` |
+| `generate-routes.ts` | `generateRoutes(projectDir)` — writes to `projectDir/.guppy/` |
+| `router.ts` | `matchRoute(pathname, routes)` |
+
+### How It Works
+
+`project/start.ts`:
+```ts
+import { createServer } from "../framework/server.ts"; // → "guppy" in production
+import shell from "./shell.html";
+await createServer(import.meta.dir, shell);
+```
+
+`project/shell.html` → `<script src="./app.tsx">` → imports `.guppy/routes.gen.ts` → imports `pages/*.tsx`.
+
+Run: `bun --hot project/start.ts`
+
+### Why Not Generate the Entry?
+
+Alternative: `guppy start` generates a temp entry in `.guppy/start.ts`. Rejected because:
+- Hides what runs from the user
+- Can't customize server config (port, middleware) without extra abstraction
+- A visible `start.ts` is simpler and more transparent — same pattern as Remix's `server.ts`

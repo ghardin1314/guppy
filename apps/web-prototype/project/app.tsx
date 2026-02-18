@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { routes } from "./routes.gen.ts";
-import { matchRoute } from "./router.ts";
+import { routes } from "./.guppy/routes.gen.ts";
+import { matchRoute } from "../framework/router.ts";
 
 function App() {
   const [pathname, setPathname] = useState(window.location.pathname);
@@ -44,5 +44,5 @@ document.addEventListener("click", (e) => {
 });
 
 // Use import.meta.hot.data for HMR-aware root (Bun's HMR API)
-const root = (import.meta.hot.data.root ??= createRoot(document.getElementById("root")!));
+const root = (import.meta.hot!.data.root ??= createRoot(document.getElementById("root")!));
 root.render(<App />);

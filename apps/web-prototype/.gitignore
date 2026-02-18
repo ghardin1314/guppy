@@ -1,3 +1,2 @@
-styles/ssr-output.css
-framework/routes.gen.ts
 node_modules/
+project/.guppy/

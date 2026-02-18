@@ -7,7 +7,7 @@
  */
 
 const BASE_URL = "http://localhost:3456";
-const routeDir = `${import.meta.dir}/../routes`;
+const routeDir = `${import.meta.dir}/../project/routes`;
 
 // Step 1: Write a new route file
 const routePath = `${routeDir}/dynamic.ts`;

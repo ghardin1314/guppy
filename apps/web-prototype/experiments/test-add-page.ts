@@ -7,7 +7,7 @@
  */
 
 const BASE_URL = "http://localhost:3456";
-const pagesDir = `${import.meta.dir}/../pages`;
+const pagesDir = `${import.meta.dir}/../project/pages`;
 
 // Step 1: Write a new page
 const pagePath = `${pagesDir}/new-page.tsx`;
