@@ -35,7 +35,7 @@ Plus: WebSocket pub/sub, file-based API routes, runtime route creation, HMR beha
   3. Use inline styles only for SSR pages
   4. Serve SSR pages through the SPA shell (hydration approach)
 
-### HMR
+### HMR (initial findings — see "HMR: Deep Investigation" below for updated results)
 
 - **Works for child components.** Edit `Counter.tsx` while the counter has state → label updates, count preserved. Bun logs `Reloaded in 3ms: components/Counter.tsx + 1 more`.
 - **Root module edits reset all state.** Editing `app.tsx` (the entry point) re-executes the module, which calls `root.render(<App />)` and remounts the entire tree. All `useState` resets to initial values.
@@ -145,3 +145,63 @@ The SPA and SSR use independent Tailwind builds:
 - **SSR**: `@tailwindcss/cli` builds `global.css` to `ssr-output.css` on demand. Served as a static file.
 
 Both scan the same source files so they produce equivalent CSS. The duplication is acceptable — it's the same input/output, just two build paths suited to their contexts.
+
+## Pure SPA with File-Based Routing
+
+After testing both SPA and SSR, we chose **pure SPA** for Guppy's page rendering. Pages are TSX components that get client-side routed — no SSR, no HTML-per-page. An agent drops a `.tsx` file in `pages/`, a code generator produces the route manifest, and the client router picks it up.
+
+### Framework / Project Split
+
+The codebase is split into two directories modeling the `guppy start` / `guppy init` boundary:
+
+- **`framework/`** — owned by the guppy runtime. Contains `server.ts`, `generate-routes.ts`, `router.ts`, `app.tsx`, `shell.html`, and the auto-generated `routes.gen.ts`.
+- **`project/`** — scaffolded by init, agent-modifiable. Contains `pages/`, `routes/`, `components/`, `styles/`.
+
+`start.ts` is the entry point (equivalent to `guppy start`). It statically imports `shell.html` (required for Bun's bundler) and calls `createServer(projectDir, shell)`.
+
+### Route Generation
+
+`generate-routes.ts` scans `project/pages/` and emits `framework/routes.gen.ts` — a file with static imports for each page component and a route array. The generated file includes `import.meta.hot.accept()` to create an HMR boundary so Bun can track page file changes through the barrel file.
+
+### Client-Side Routing
+
+`app.tsx` imports `routes.gen.ts`, matches the current `window.location.pathname` against route patterns (including `[slug]` dynamic segments), and renders the matched component. Navigation uses `history.pushState` + `popstate` event interception on `<a>` clicks. `import.meta.hot.data` preserves the React root across HMR reloads.
+
+## HMR: Deep Investigation
+
+### The Problem
+
+After the framework/project split, editing a page TSX file no longer triggered browser updates despite the server logging `Reloaded in 4ms: project/pages/about.tsx + 1 more`.
+
+### Root Cause: FileSystemRouter Breaks Client-Side HMR
+
+**`Bun.FileSystemRouter` pointing to a directory containing files in the client bundle breaks HMR.** Verified via A/B test:
+
+| Setup | Edit 1 | Edit 2 | Edit 3 | Server reloads detected |
+|-------|--------|--------|--------|------------------------|
+| `new Bun.FileSystemRouter({ dir: pages/ })` before serve | no update | no update | no update | 1 (then stopped) |
+| `new Bun.Glob("**/*.tsx")` scanning same dir | updated | updated | updated | 3 (all detected) |
+
+Same server code, same `shell.html`, same pages directory. Only difference: one line creating `FileSystemRouter`. The FSR variant's server even stopped detecting file changes after the first edit.
+
+This affects ANY `FileSystemRouter` pointing to a directory with client-bundled files, regardless of:
+- Whether it's created before or after `Bun.serve()`
+- Whether it's persistent or a transient local variable
+- Whether `router.reload()` is called
+
+`FileSystemRouter` for non-bundled directories (like API `routes/`) does NOT break HMR.
+
+### Fix
+
+Replaced `FileSystemRouter` in `generate-routes.ts` with `Bun.Glob` for page file discovery. A manual `fileToPattern()` function handles the path-to-route conversion (index files, dynamic `[slug]` segments). Routes are sorted deterministically to prevent unnecessary file rewrites.
+
+### Other HMR Requirements Discovered
+
+1. **`import.meta.hot.accept()` in barrel files.** React Fast Refresh only instruments files that exclusively export React components. `routes.gen.ts` exports a `const routes = [...]` array, so it needs an explicit HMR boundary.
+2. **`import.meta.hot.data` for React root.** Using `import.meta.hot.data.root ??= createRoot(el)` instead of `globalThis.__root` — Bun's recommended approach.
+3. **Deterministic route ordering.** `Object.entries(router.routes)` returns non-deterministic order. Without sorting, `generate-routes.ts` would rewrite `routes.gen.ts` on every call even with identical pages, triggering unnecessary rebundles.
+4. **`development: { hmr: true }` vs `--hot`.** Completely separate systems. `development.hmr` is client-side HMR (bundler pushes updates to browser). `--hot` is server-side module reloading (re-executes changed server modules). Both may be needed but for different reasons.
+
+### Likely Bun Bug
+
+The `FileSystemRouter` + HMR conflict is almost certainly a bug. FSR is documented as not having built-in file watching (`reload()` is manual), yet creating one interferes with the bundler's HMR file change detection for the same directory. The exact internal mechanism is unknown — possibly shared kqueue/inotify descriptors, a module registry collision, or a file stat cache conflict. Worth filing upstream.
