@@ -101,6 +101,8 @@ Database backups and git history together mean the full agent state is recoverab
 
 ## systemd
 
+Reference: [Running Bun as a systemd service](https://bun.com/docs/guides/ecosystem/systemd)
+
 `guppy init` creates a user-level systemd service (no sudo required):
 
 ```ini
@@ -120,11 +122,31 @@ RestartSec=5
 WantedBy=default.target
 ```
 
+All paths in `ExecStart` must be absolute — systemd does not resolve relative paths or `~`.
+
+| Directive | Purpose |
+|---|---|
+| `After=network.target` | Wait for network before starting |
+| `Type=simple` | Process started by `ExecStart` is the main process |
+| `Restart=always` | Restart on any exit (other options: `no`, `on-failure`, `on-abnormal`) |
+| `RestartSec=5` | Wait 5s between restarts to avoid tight crash loops |
+| `WantedBy=default.target` | Start on user login (user service equivalent of `multi-user.target`) |
+
 Enable and start:
 
 ```bash
 systemctl --user enable guppy
 systemctl --user start guppy
+```
+
+Common commands:
+
+```bash
+systemctl --user status guppy     # check status
+systemctl --user stop guppy       # stop
+systemctl --user restart guppy    # restart
+systemctl --user daemon-reload    # reload after editing the service file
+journalctl --user -u guppy -f     # tail logs
 ```
 
 **Lingering**: user services stop on logout unless lingering is enabled. The init wizard checks for this and prompts:
@@ -133,6 +155,14 @@ systemctl --user start guppy
 # Requires sudo (one-time)
 loginctl enable-linger $USER
 ```
+
+**Port binding**: if Guppy needs to bind to ports 80/443 as a non-root user, grant the capability to the Bun binary:
+
+```bash
+sudo setcap CAP_NET_BIND_SERVICE=+eip ~/.bun/bin/bun
+```
+
+Not needed if using a higher port (e.g., 3000) or running behind a reverse proxy.
 
 ## Updates
 
