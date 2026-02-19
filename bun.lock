@@ -104,12 +104,16 @@
       "name": "create-guppy",
       "version": "0.0.0",
       "dependencies": {
+        "@guppy/core": "workspace:*",
         "@guppy/web": "workspace:*",
       },
     },
     "packages/web": {
       "name": "@guppy/web",
       "version": "0.0.0",
+      "dependencies": {
+        "@guppy/core": "workspace:*",
+      },
     },
   },
   "packages": {

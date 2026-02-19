@@ -1,10 +1,18 @@
+import type { Guppy } from "@guppy/core";
+import type { HTMLBundle, ServerWebSocket } from "bun";
 import { watch } from "fs/promises";
 import { generateRoutes } from "./generate-routes.ts";
 
+export interface RouteContext {
+  params: Record<string, string>;
+  query: Record<string, string>;
+  guppy: Guppy;
+}
+
 export async function createServer(
   projectDir: string,
-  shell: Response,
-  options?: { port?: number }
+  shell: HTMLBundle,
+  options: { guppy: Guppy; port?: number }
 ) {
   await generateRoutes(projectDir);
 
@@ -13,7 +21,7 @@ export async function createServer(
     dir: `${projectDir}/routes`,
   });
 
-  const clients = new Set<import("bun").ServerWebSocket<unknown>>();
+  const clients = new Set<ServerWebSocket<unknown>>();
 
   // Watch pages/ → regenerate route manifest (new routes only)
   // Bun's built-in HMR handles pushing client updates for existing pages
@@ -44,10 +52,10 @@ export async function createServer(
     const mod = await import(match.filePath);
     const handler = mod[req.method] ?? mod.default;
     if (!handler) return new Response("Method not allowed", { status: 405 });
-    return handler(req, { params: match.params, query: match.query });
+    return handler(req, { params: match.params, query: match.query, guppy: options.guppy } satisfies RouteContext);
   }
 
-  const port = options?.port ?? (process.env.PORT ? Number(process.env.PORT) : 3456);
+  const port = options.port ?? (process.env.PORT ? Number(process.env.PORT) : 3456);
 
   const server = Bun.serve({
     port,

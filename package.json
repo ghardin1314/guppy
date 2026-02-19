@@ -3,6 +3,10 @@
   "private": true,
   "packageManager": "bun@1.3.9",
   "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "typecheck": "turbo typecheck",
+    "test": "turbo test"
+  },
   "devDependencies": {
     "@effect/language-service": "^0.74.0",
     "@effect/vitest": "^0.27.0",

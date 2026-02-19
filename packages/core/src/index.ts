@@ -1,3 +1,4 @@
+export { getModel } from "@mariozechner/pi-ai";
 export { spawn } from "./agent-thread.ts";
 export type { AgentThreadConfig, AgentThreadHandle } from "./agent-thread.ts";
 export { AgentError, AgentFactory, PiAgentFactoryLive } from "./agent.ts";
@@ -37,3 +38,5 @@ export type { TransportRegistryService } from "./transport-registry.ts";
 export { TransportService } from "./transport.ts";
 export type { Transport } from "./transport.ts";
 export * from "./types.ts";
+export { Guppy } from "./guppy.ts";
+export type { GuppyConfig, CoreServices } from "./guppy.ts";

@@ -3,19 +3,28 @@ import { scaffold } from "../src/scaffold.ts";
 import { mkdtemp, readdir, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { $ } from "bun";
+import { $, type Subprocess } from "bun";
 const webPkgDir = join(import.meta.dir, "../../web");
-let tarballPath: string;
+const corePkgDir = join(import.meta.dir, "../../core");
+let webTarball: string;
+let coreTarball: string;
 let webVersion: string;
+let coreVersion: string;
 
 beforeAll(async () => {
-  // Pack @guppy/web into a tarball for integration tests
-  const result = await $`cd ${webPkgDir} && bun pm pack`.text();
-  const filename = result.split("\n").find((l) => l.endsWith(".tgz"))!.trim();
-  tarballPath = join(webPkgDir, filename);
+  // Pack @guppy/web and @guppy/core into tarballs for integration tests
+  const [webResult, coreResult] = await Promise.all([
+    $`cd ${webPkgDir} && bun pm pack`.text(),
+    $`cd ${corePkgDir} && bun pm pack`.text(),
+  ]);
+  const parseTgz = (output: string) => output.split("\n").find((l) => l.trim().endsWith(".tgz") && !l.includes(" "))!.trim();
+  webTarball = join(webPkgDir, parseTgz(webResult));
+  coreTarball = join(corePkgDir, parseTgz(coreResult));
 
   const webPkg: { version: string } = await Bun.file(join(webPkgDir, "package.json")).json();
   webVersion = webPkg.version;
+  const corePkg: { version: string } = await Bun.file(join(corePkgDir, "package.json")).json();
+  coreVersion = corePkg.version;
 });
 
 describe("scaffold", () => {
@@ -44,6 +53,7 @@ describe("scaffold", () => {
       // Verify package.json content
       const pkg = await Bun.file(join(dir, "package.json")).json();
       expect(pkg.name).toBe("guppy-app");
+      expect(pkg.dependencies["@guppy/core"]).toBe(`^${coreVersion}`);
       expect(pkg.dependencies["@guppy/web"]).toBe(`^${webVersion}`);
       expect(pkg.dependencies["react"]).toBeDefined();
       expect(pkg.dependencies["react-router"]).toBeDefined();
@@ -54,15 +64,14 @@ describe("scaffold", () => {
 
   test("packageOverrides are applied", async () => {
     const dir = await mkdtemp(join(tmpdir(), "guppy-test-"));
+    const override = `file:./guppy-web-${webVersion}.tgz`;
     try {
       await scaffold(dir, {
-        packageOverrides: {
-          "@guppy/web": "file:./guppy-web-0.0.0.tgz",
-        },
+        packageOverrides: { "@guppy/web": override },
       });
 
       const pkg = await Bun.file(join(dir, "package.json")).json();
-      expect(pkg.dependencies["@guppy/web"]).toBe("file:./guppy-web-0.0.0.tgz");
+      expect(pkg.overrides["@guppy/web"]).toBe(override);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -70,13 +79,14 @@ describe("scaffold", () => {
 
   test("server boots and serves pages + API", async () => {
     const dir = await mkdtemp(join(tmpdir(), "guppy-test-"));
-    let proc: import("bun").Subprocess | undefined;
+    let proc: Subprocess | undefined;
 
     try {
-      // Scaffold with tarball override
+      // Scaffold with tarball overrides
       await scaffold(dir, {
         packageOverrides: {
-          "@guppy/web": `file:${tarballPath}`,
+          "@guppy/core": `file:${coreTarball}`,
+          "@guppy/web": `file:${webTarball}`,
         },
       });
 
@@ -86,22 +96,12 @@ describe("scaffold", () => {
       // Pick a random port to avoid conflicts
       const port = 10000 + Math.floor(Math.random() * 50000);
 
-      // Patch start.ts to use our random port
-      const startFile = join(dir, "start.ts");
-      const startContent = await Bun.file(startFile).text();
-      await Bun.write(
-        startFile,
-        startContent.replace(
-          "await createServer(import.meta.dir, shell);",
-          `await createServer(import.meta.dir, shell, { port: ${port} });`
-        )
-      );
-
       // Boot the server
       proc = Bun.spawn(["bun", "--hot", "start.ts"], {
         cwd: dir,
         stdout: "pipe",
         stderr: "pipe",
+        env: { ...process.env, PORT: String(port) },
       });
 
       // Poll /api/health until ready (max 30s)

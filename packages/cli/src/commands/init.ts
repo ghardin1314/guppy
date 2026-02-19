@@ -14,19 +14,23 @@ export function registerInit(program: Command) {
     .command("init")
     .argument("[dir]", "target directory")
     .option("--skip-install", "skip running bun install")
-    .option("--local", "use local workspace @guppy/web (packs tarball)")
+    .option("--local", "use local workspace packages (packs tarballs)")
     .action(async (dir?: string, opts?: InitOpts) => {
       await runInit(dir, opts);
     });
 }
 
-async function packLocalWeb(): Promise<string> {
-  const webPkgJson = require.resolve("@guppy/web/package.json");
-  const webDir = dirname(webPkgJson);
-  const result = await $`cd ${webDir} && bun pm pack`.text();
-  const filename = result.split("\n").find((l) => l.endsWith(".tgz"))?.trim();
-  if (!filename) throw new Error("Failed to pack @guppy/web — no .tgz in output");
-  return resolve(webDir, filename);
+function parseTgzFilename(output: string): string {
+  const line = output.split("\n").find((l) => l.trim().endsWith(".tgz") && !l.includes(" "));
+  if (!line) throw new Error("No .tgz filename in bun pm pack output");
+  return line.trim();
+}
+
+async function packLocalPkg(name: string): Promise<string> {
+  const pkgJson = require.resolve(`${name}/package.json`);
+  const pkgDir = dirname(pkgJson);
+  const result = await $`cd ${pkgDir} && bun pm pack`.text();
+  return resolve(pkgDir, parseTgzFilename(result));
 }
 
 export async function runInit(dir?: string, opts?: InitOpts) {
@@ -71,13 +75,19 @@ export async function runInit(dir?: string, opts?: InitOpts) {
 
   const s = clack.spinner();
 
-  // Pack local @guppy/web if --local
+  // Pack local packages if --local
   let packageOverrides: Record<string, string> | undefined;
   if (opts?.local) {
-    s.start("Packing local @guppy/web...");
-    const tarball = await packLocalWeb();
-    s.stop(`Packed ${basename(tarball)}`);
-    packageOverrides = { "@guppy/web": `file:${tarball}` };
+    s.start("Packing local packages...");
+    const [coreTarball, webTarball] = await Promise.all([
+      packLocalPkg("@guppy/core"),
+      packLocalPkg("@guppy/web"),
+    ]);
+    s.stop(`Packed ${basename(coreTarball)}, ${basename(webTarball)}`);
+    packageOverrides = {
+      "@guppy/core": `file:${coreTarball}`,
+      "@guppy/web": `file:${webTarball}`,
+    };
   }
 
   s.start("Scaffolding project...");
