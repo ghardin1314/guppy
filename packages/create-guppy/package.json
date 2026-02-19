@@ -1,9 +1,9 @@
 {
-  "name": "@guppy/web",
+  "name": "create-guppy",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
-  "files": ["src"]
+  "files": ["src", "template"]
 }
