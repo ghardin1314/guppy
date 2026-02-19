@@ -16,22 +16,24 @@
  *   - Close the scope, discard the handle. SQLite has everything.
  */
 
-import { Chunk, Effect, Mailbox, Scope, Stream } from "effect";
 import type { SqlError } from "@effect/sql";
-import type { AgentEvent, AgentMessage, AgentTool } from "@mariozechner/pi-agent-core";
-import type { Model } from "@mariozechner/pi-ai";
-import { AgentFactory, AgentError } from "./agent.ts";
+import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import type { TSchema } from "@mariozechner/pi-ai";
+import { Chunk, Effect, Mailbox, Scope, Stream } from "effect";
+import { AgentError, AgentFactory, type CreateAgentConfig } from "./agent.ts";
 import { ThreadStore } from "./repository.ts";
 import { ThreadMessage } from "./thread-message.ts";
 import type { Message } from "./types.ts";
 
 // -- Config -------------------------------------------------------------------
 
-export interface AgentThreadConfig {
-  readonly model: Model<any>;
-  readonly systemPrompt: string;
-  readonly tools?: AgentTool[];
-}
+export type AgentThreadConfig<
+  TParameters extends TSchema = TSchema,
+  TDetails = any,
+> = Pick<
+  CreateAgentConfig<TParameters, TDetails>,
+  "model" | "systemPrompt" | "tools"
+>;
 
 // -- Handle -------------------------------------------------------------------
 
@@ -62,9 +64,10 @@ function rowsToAgentMessages(rows: ReadonlyArray<Message>): AgentMessage[] {
 
 // TODO: replace cast with proper type guard — tightly coupled to Pi's Message shape
 /** Convert an AgentMessage → { role, content } for SQLite storage. */
-function agentMessageToRow(
-  msg: AgentMessage,
-): { role: Message["role"]; content: string } {
+function agentMessageToRow(msg: AgentMessage): {
+  role: Message["role"];
+  content: string;
+} {
   const m = msg as import("@mariozechner/pi-ai").Message;
   switch (m.role) {
     case "assistant":

@@ -4,7 +4,7 @@ import type {
   AgentTool,
 } from "@mariozechner/pi-agent-core";
 import { Agent as PiAgent } from "@mariozechner/pi-agent-core";
-import type { Model } from "@mariozechner/pi-ai";
+import type { Model, TSchema } from "@mariozechner/pi-ai";
 import { getEnvApiKey } from "@mariozechner/pi-ai";
 import { Chunk, Context, Effect, Layer, Schema, Stream } from "effect";
 
@@ -16,10 +16,13 @@ export class AgentError extends Schema.TaggedError<AgentError>()("AgentError", {
 
 // -- Config -------------------------------------------------------------------
 
-export interface CreateAgentConfig {
+export interface CreateAgentConfig<
+  TParameters extends TSchema = TSchema,
+  TDetails = any,
+> {
   readonly systemPrompt: string;
   readonly model: Model<any>;
-  readonly tools?: AgentTool[];
+  readonly tools?: AgentTool<TParameters, TDetails>[];
   readonly messages?: AgentMessage[];
 }
 
