@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "@guppy/core": "workspace:*",
-    "@guppy/agent": "workspace:*",
     "@guppy/web": "workspace:*"
   }
 }

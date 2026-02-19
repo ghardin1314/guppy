@@ -68,18 +68,10 @@
         "typescript": "^5",
       },
     },
-    "packages/agent": {
-      "name": "@guppy/agent",
-      "version": "0.0.0",
-      "dependencies": {
-        "@guppy/core": "workspace:*",
-      },
-    },
     "packages/cli": {
       "name": "@guppy/cli",
       "version": "0.0.0",
       "dependencies": {
-        "@guppy/agent": "workspace:*",
         "@guppy/core": "workspace:*",
         "@guppy/web": "workspace:*",
       },
@@ -101,12 +93,16 @@
         "vitest": "^4.0.18",
       },
     },
+    "packages/create-guppy": {
+      "name": "create-guppy",
+      "version": "0.0.0",
+      "dependencies": {
+        "@guppy/web": "workspace:*",
+      },
+    },
     "packages/web": {
       "name": "@guppy/web",
       "version": "0.0.0",
-      "dependencies": {
-        "@guppy/core": "workspace:*",
-      },
     },
   },
   "packages": {
@@ -257,8 +253,6 @@
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.27.3", "", { "os": "win32", "cpu": "x64" }, "sha512-4uJGhsxuptu3OcpVAzli+/gWusVGwZZHTlS63hh++ehExkVT8SgiEf7/uC/PclrPPkLhZqGgCTjd0VWLo6xMqA=="],
 
     "@google/genai": ["@google/genai@1.42.0", "", { "dependencies": { "google-auth-library": "^10.3.0", "p-retry": "^4.6.2", "protobufjs": "^7.5.4", "ws": "^8.18.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.25.2" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-+3nlMTcrQufbQ8IumGkOphxD5Pd5kKyJOzLcnY0/1IuE8upJk5aLmoexZ2BJhBp1zAjRJMEB4a2CJwKI9e2EYw=="],
-
-    "@guppy/agent": ["@guppy/agent@workspace:packages/agent"],
 
     "@guppy/cli": ["@guppy/cli@workspace:packages/cli"],
 
@@ -619,6 +613,8 @@
     "color-name": ["color-name@1.1.4", "", {}, "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA=="],
 
     "cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
+
+    "create-guppy": ["create-guppy@workspace:packages/create-guppy"],
 
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
 
