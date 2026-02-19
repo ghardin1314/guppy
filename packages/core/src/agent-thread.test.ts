@@ -1,148 +1,25 @@
 import { expect } from "bun:test";
-import { Chunk, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
-import { getModel } from "@mariozechner/pi-ai";
-import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import { Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { makeDbLayer } from "./db.ts";
 import { ThreadStore, ThreadStoreLive } from "./repository.ts";
-import { AgentFactory, AgentError, type AgentHandle } from "./agent.ts";
-import {
-  spawn,
-  type AgentThreadHandle,
-  type AgentThreadConfig,
-} from "./agent-thread.ts";
+import { spawn } from "./agent-thread.ts";
 import { ThreadMessage } from "./thread-message.ts";
-import { it } from "./test.ts";
-
-// -- Echo agent factory (test double) -----------------------------------------
-
-const EchoAgentFactoryLive = Layer.succeed(AgentFactory, {
-  create: (config) =>
-    Effect.sync(() => {
-      const msgs: AgentMessage[] = [...(config.messages ?? [])];
-      const listeners = new Set<(event: AgentEvent) => void>();
-      let streaming = false;
-
-      const emit = (type: string) => {
-        const event = { type } as AgentEvent;
-        for (const fn of listeners) fn(event);
-      };
-
-      return {
-        prompt: (content) =>
-          Effect.async<void, AgentError>((resume) => {
-            streaming = true;
-            const text =
-              typeof content === "string"
-                ? content
-                : JSON.stringify(content);
-
-            msgs.push({
-              role: "user",
-              content: [{ type: "text", text }],
-              timestamp: Date.now(),
-            } as AgentMessage);
-
-            msgs.push({
-              role: "assistant",
-              content: [{ type: "text", text: `echo: ${text}` }],
-              api: "anthropic-messages",
-              provider: "anthropic",
-              model: "mock",
-              usage: {
-                input: 0,
-                output: 0,
-                cacheRead: 0,
-                cacheWrite: 0,
-                totalTokens: 0,
-                cost: {
-                  input: 0,
-                  output: 0,
-                  cacheRead: 0,
-                  cacheWrite: 0,
-                  total: 0,
-                },
-              },
-              stopReason: "stop",
-              timestamp: Date.now(),
-            } as AgentMessage);
-
-            setTimeout(() => {
-              emit("turn_end");
-              streaming = false;
-              emit("agent_end");
-              resume(Effect.void);
-            }, 0);
-          }),
-        steer: (msg) => {
-          msgs.push(msg);
-        },
-        followUp: (msg) => {
-          msgs.push(msg);
-        },
-        continue: () => Effect.void,
-        abort: () => {
-          streaming = false;
-        },
-        isStreaming: () => streaming,
-        messages: () => msgs,
-        events: Stream.async<AgentEvent>((emit) => {
-          const fn = (event: AgentEvent) => {
-            emit(Effect.succeed(Chunk.of(event)));
-          };
-          listeners.add(fn);
-          return Effect.sync(() => {
-            listeners.delete(fn);
-          });
-        }),
-      } satisfies AgentHandle;
-    }),
-});
+import {
+  it,
+  EchoAgentFactoryLive,
+  makeTestTransport,
+  makeInstrumentedAgentFactory,
+  collectUntilEnd,
+  withThread,
+  testConfig,
+} from "./testing.ts";
 
 // -- Layers -------------------------------------------------------------------
 
 const DbLayer = makeDbLayer(":memory:");
 const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
-const TestLayer = Layer.merge(StoreLayer, EchoAgentFactoryLive);
-
-// -- Test config --------------------------------------------------------------
-
-const testConfig: AgentThreadConfig = {
-  model: getModel("anthropic", "claude-sonnet-4-20250514"),
-  systemPrompt: "You are a test agent.",
-};
-
-// -- Helpers ------------------------------------------------------------------
-
-function collectUntilEnd(
-  handle: AgentThreadHandle,
-): Effect.Effect<AgentEvent[]> {
-  return handle.events.pipe(
-    Stream.takeUntil((e) => e.type === "agent_end"),
-    Stream.runCollect,
-    Effect.map((chunk) => [...chunk]),
-  );
-}
-
-const withThread = (
-  channelId: string,
-  fn: (
-    handle: AgentThreadHandle,
-    threadId: string,
-  ) => Effect.Effect<void, unknown, ThreadStore | AgentFactory>,
-) =>
-  Effect.gen(function* () {
-    const store = yield* ThreadStore;
-    const thread = yield* store.getOrCreateThread("test", channelId);
-
-    const scope = yield* Scope.make();
-    const handle = yield* spawn(thread.id, testConfig).pipe(
-      Effect.provideService(Scope.Scope, scope),
-    );
-
-    yield* fn(handle, thread.id);
-
-    yield* Scope.close(scope, Exit.succeed(void 0));
-  });
+const { state: transportState, layer: TransportLayer } = makeTestTransport();
+const TestLayer = Layer.mergeAll(StoreLayer, EchoAgentFactoryLive, TransportLayer);
 
 // -- Tests --------------------------------------------------------------------
 
@@ -169,7 +46,6 @@ it.layer(TestLayer)("agent-thread", (it) => {
         yield* handle.send(ThreadMessage.Prompt({ content: "persist me" }));
         yield* Fiber.join(fiber);
 
-        // Let persist fiber process the turn_end event
         yield* Effect.yieldNow();
 
         const ctx = yield* store.getContext(threadId);
@@ -242,5 +118,182 @@ it.layer(TestLayer)("agent-thread", (it) => {
         ]);
       }),
     ),
+  );
+
+  it.live("delivers events to transport", () =>
+    withThread("t6", (handle) =>
+      Effect.gen(function* () {
+        const fiber = yield* Effect.fork(collectUntilEnd(handle));
+        yield* handle.send(ThreadMessage.Prompt({ content: "deliver me" }));
+        yield* Fiber.join(fiber);
+        yield* Effect.yieldNow();
+
+        const delivered = transportState.delivered.filter(
+          (d) => d.event.type === "turn_end" || d.event.type === "agent_end",
+        );
+        expect(delivered.length).toBeGreaterThanOrEqual(2);
+      }),
+    ),
+  );
+
+  it.live("calls transport.getContext before prompt", () =>
+    withThread("t7", (handle, threadId) =>
+      Effect.gen(function* () {
+        const before = transportState.contextCalls.length;
+        const fiber = yield* Effect.fork(collectUntilEnd(handle));
+        yield* handle.send(ThreadMessage.Prompt({ content: "ctx test" }));
+        yield* Fiber.join(fiber);
+
+        expect(transportState.contextCalls.length).toBeGreaterThan(before);
+        expect(transportState.contextCalls).toContain(threadId);
+      }),
+    ),
+  );
+});
+
+// -- Tests with instrumented agent factory ------------------------------------
+
+const {
+  state: instrumentedState,
+  layer: InstrumentedAgentLayer,
+} = makeInstrumentedAgentFactory({ promptDelayMs: 100 });
+
+const { state: instrumentedTransport, layer: InstrumentedTransportLayer } =
+  makeTestTransport();
+
+const InstrumentedTestLayer = Layer.mergeAll(
+  StoreLayer,
+  InstrumentedAgentLayer,
+  InstrumentedTransportLayer,
+);
+
+it.layer(InstrumentedTestLayer)("agent-thread (instrumented)", (it) => {
+  it.live("steering while streaming calls steer directly", () =>
+    withThread("t-steer-streaming", (handle) =>
+      Effect.gen(function* () {
+        const before = instrumentedState.steerCalls.length;
+        const fiber = yield* Effect.fork(collectUntilEnd(handle));
+        yield* handle.send(ThreadMessage.Prompt({ content: "streaming" }));
+        yield* Effect.sleep("30 millis");
+
+        const result = yield* handle.send(
+          ThreadMessage.Steering({ content: "redirect" }),
+        );
+        expect(result).toBe(true);
+
+        yield* Fiber.join(fiber);
+        expect(instrumentedState.steerCalls.length).toBeGreaterThan(before);
+        expect(instrumentedState.steerCalls.at(-1)?.content).toBe("redirect");
+      }),
+    ),
+  );
+
+  it.live("steering when not streaming falls through to prompt", () =>
+    withThread("t-steer-idle", (handle) =>
+      Effect.gen(function* () {
+        const fiber = yield* Effect.fork(collectUntilEnd(handle));
+        yield* handle.send(ThreadMessage.Steering({ content: "as prompt" }));
+        const events = yield* Fiber.join(fiber);
+
+        const types = events.map((e) => e.type);
+        expect(types).toContain("turn_end");
+        expect(types).toContain("agent_end");
+      }),
+    ),
+  );
+
+  it.live("followUp when not streaming triggers continue", () =>
+    withThread("t-followup", (handle) =>
+      Effect.gen(function* () {
+        // Complete a prompt first
+        const f1 = yield* Effect.fork(collectUntilEnd(handle));
+        yield* handle.send(ThreadMessage.Prompt({ content: "initial" }));
+        yield* Fiber.join(f1);
+        yield* Effect.yieldNow();
+
+        const beforeFollow = instrumentedState.followUpCalls.length;
+        const beforeContinue = instrumentedState.continueCalls;
+
+        yield* handle.send(ThreadMessage.FollowUp({ content: "follow up" }));
+        yield* Effect.sleep("50 millis");
+
+        expect(instrumentedState.followUpCalls.length).toBeGreaterThan(
+          beforeFollow,
+        );
+        expect(instrumentedState.continueCalls).toBeGreaterThan(
+          beforeContinue,
+        );
+      }),
+    ),
+  );
+
+  it.live("rehydration loads existing history on spawn", () =>
+    Effect.gen(function* () {
+      const store = yield* ThreadStore;
+      const thread = yield* store.getOrCreateThread("test", "t-rehydrate");
+
+      // Pre-populate DB with user + assistant messages
+      const m1 = yield* store.insertMessage(
+        thread.id,
+        null,
+        "user",
+        JSON.stringify([{ type: "text", text: "old question" }]),
+      );
+      yield* store.insertMessage(
+        thread.id,
+        m1.id,
+        "assistant",
+        JSON.stringify({
+          role: "assistant",
+          content: [{ type: "text", text: "old answer" }],
+          api: "anthropic-messages",
+          provider: "anthropic",
+          model: "mock",
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total: 0,
+            },
+          },
+          stopReason: "stop",
+          timestamp: Date.now(),
+        }),
+      );
+
+      const beforeCreate = instrumentedState.createConfigs.length;
+
+      // Spawn thread — should rehydrate with existing messages
+      const scope = yield* Scope.make();
+      const handle = yield* spawn(thread.id, testConfig).pipe(
+        Effect.provideService(Scope.Scope, scope),
+      );
+
+      // Verify factory received the 2 pre-existing messages
+      const config = instrumentedState.createConfigs[beforeCreate]!;
+      expect(config.messages?.length).toBe(2);
+
+      // Send a new prompt and verify it appends to existing history
+      const fiber = yield* Effect.fork(collectUntilEnd(handle));
+      yield* handle.send(ThreadMessage.Prompt({ content: "new question" }));
+      yield* Fiber.join(fiber);
+      yield* Effect.sleep("200 millis");
+
+      const ctx = yield* store.getContext(thread.id);
+      expect(ctx.length).toBeGreaterThanOrEqual(4);
+      expect(ctx[0]!.role).toBe("user");
+      expect(ctx[1]!.role).toBe("assistant");
+      expect(ctx[2]!.role).toBe("user");
+      expect(ctx[3]!.role).toBe("assistant");
+
+      yield* Scope.close(scope, Exit.void);
+    }),
   );
 });

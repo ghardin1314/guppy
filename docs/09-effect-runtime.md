@@ -1,5 +1,7 @@
 # Effect Runtime
 
+> **Transport sections superseded by [10-transports-v2.md](./10-transports-v2.md).** The `SlackTransport` class pattern and callback bridge are replaced by `LayerMap`-backed transports with a shared `Transport` interface. Core Effect patterns (Guppy class, Layer composition, ManagedRuntime) still apply.
+
 Uses [Effect](https://effect.website) for dependency injection, structured concurrency, and lifecycle management. The public API is plain TypeScript — Effect is an implementation detail hidden behind the `Guppy` class.
 
 Prototype: `apps/effect-prototype/main.ts`

@@ -6,8 +6,12 @@
  *   - Create agent handle via factory, seeded with loaded history
  *
  * On prompt/steer/followUp:
+ *   - Pull transport context via TransportService.getContext
  *   - Dispatch to agent handle methods
  *   - On each turn_end, persist new messages to SQLite
+ *
+ * Event delivery:
+ *   - A scoped fiber calls transport.deliver for every AgentEvent
  *
  * On stop:
  *   - agent.abort()
@@ -22,6 +26,7 @@ import type { TSchema } from "@mariozechner/pi-ai";
 import { Chunk, Effect, Mailbox, Scope, Stream } from "effect";
 import { AgentError, AgentFactory, type CreateAgentConfig } from "./agent.ts";
 import { ThreadStore } from "./repository.ts";
+import { TransportService } from "./transport.ts";
 import { ThreadMessage } from "./thread-message.ts";
 import type { Message } from "./types.ts";
 
@@ -85,6 +90,8 @@ function agentMessageToRow(msg: AgentMessage): {
 /**
  * Spawn an agent thread. Rehydrates from SQLite, creates an agent handle
  * via factory, and starts a processing fiber. Scoped — closing the scope evicts.
+ *
+ * Requires TransportService to be provided (typically via TransportMap.get).
  */
 export const spawn = (
   threadId: string,
@@ -92,11 +99,12 @@ export const spawn = (
 ): Effect.Effect<
   AgentThreadHandle,
   SqlError.SqlError | AgentError,
-  AgentFactory | ThreadStore | Scope.Scope
+  AgentFactory | ThreadStore | TransportService | Scope.Scope
 > =>
   Effect.gen(function* () {
     const factory = yield* AgentFactory;
     const store = yield* ThreadStore;
+    const transport = yield* TransportService;
     const inbox = yield* Mailbox.make<ThreadMessage>();
 
     // -- Rehydrate: load context, create agent handle ---------------------------
@@ -134,6 +142,13 @@ export const spawn = (
       Effect.forkScoped,
     );
 
+    // -- Transport delivery fiber -----------------------------------------------
+
+    yield* agent.events.pipe(
+      Stream.runForEach((event) => transport.deliver(threadId, event)),
+      Effect.forkScoped,
+    );
+
     // -- Processing loop --------------------------------------------------------
 
     const loop = Effect.gen(function* () {
@@ -144,7 +159,14 @@ export const spawn = (
 
         for (const msg of messages) {
           yield* ThreadMessage.$match(msg, {
-            Prompt: ({ content }) => agent.prompt(content),
+            Prompt: ({ content }) =>
+              Effect.gen(function* () {
+                const ctx = yield* transport.getContext(threadId);
+                const enriched = ctx
+                  ? `${ctx}\n\n---\n${content}`
+                  : content;
+                yield* agent.prompt(enriched);
+              }),
             FollowUp: ({ content }) =>
               Effect.gen(function* () {
                 agent.followUp({

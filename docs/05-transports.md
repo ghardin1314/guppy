@@ -1,5 +1,7 @@
 # Transports
 
+> **Superseded by [10-transports-v2.md](./10-transports-v2.md).** This doc captured early requirements. The v2 doc has the concrete design using `LayerMap`, `TransportService`, and direct thread↔transport integration.
+
 Transports bridge external messaging channels into the Guppy runtime. They run on boot and stay connected for the lifetime of the process.
 
 ## Responsibilities

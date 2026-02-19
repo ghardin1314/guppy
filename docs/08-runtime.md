@@ -1,5 +1,7 @@
 # Runtime
 
+> **Transport sections superseded by [10-transports-v2.md](./10-transports-v2.md).** The subscriber-based delivery model and `bootTransports` scan are replaced by `LayerMap`-backed transports with direct thread↔transport integration. Core runtime structure (orchestrator, event bus, boot sequence) still applies.
+
 Everything runs in a single Bun process. A shared runtime object wires the pieces together.
 
 ## The Runtime Object
