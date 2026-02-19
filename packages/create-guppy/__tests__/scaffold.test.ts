@@ -4,15 +4,18 @@ import { mkdtemp, readdir, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { $ } from "bun";
-
 const webPkgDir = join(import.meta.dir, "../../web");
 let tarballPath: string;
+let webVersion: string;
 
 beforeAll(async () => {
   // Pack @guppy/web into a tarball for integration tests
   const result = await $`cd ${webPkgDir} && bun pm pack`.text();
   const filename = result.split("\n").find((l) => l.endsWith(".tgz"))!.trim();
   tarballPath = join(webPkgDir, filename);
+
+  const webPkg: { version: string } = await Bun.file(join(webPkgDir, "package.json")).json();
+  webVersion = webPkg.version;
 });
 
 describe("scaffold", () => {
@@ -41,7 +44,7 @@ describe("scaffold", () => {
       // Verify package.json content
       const pkg = await Bun.file(join(dir, "package.json")).json();
       expect(pkg.name).toBe("guppy-app");
-      expect(pkg.dependencies["@guppy/web"]).toBeDefined();
+      expect(pkg.dependencies["@guppy/web"]).toBe(`^${webVersion}`);
       expect(pkg.dependencies["react"]).toBeDefined();
       expect(pkg.dependencies["react-router"]).toBeDefined();
     } finally {
@@ -128,7 +131,7 @@ describe("scaffold", () => {
       // GET /api/health → 200, JSON with status: "ok"
       const healthRes = await fetch(`${base}/api/health`);
       expect(healthRes.status).toBe(200);
-      const healthData = await healthRes.json();
+      const healthData = (await healthRes.json()) as { status: string };
       expect(healthData.status).toBe("ok");
     } finally {
       if (proc) {

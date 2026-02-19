@@ -8,11 +8,19 @@ interface ScaffoldOptions {
 
 const templateDir = join(dirname(import.meta.dir), "template");
 
+async function getWebVersion(): Promise<string> {
+  const pkgPath = require.resolve("@guppy/web/package.json");
+  const pkg: { version: string } = await Bun.file(pkgPath).json();
+  return pkg.version;
+}
+
 export async function scaffold(targetDir: string, options?: ScaffoldOptions) {
   await mkdir(targetDir, { recursive: true });
 
   // Copy template/ → targetDir recursively
   await cp(templateDir, targetDir, { recursive: true });
+
+  const webVersion = await getWebVersion();
 
   // Build package.json dynamically
   const pkg = {
@@ -23,7 +31,7 @@ export async function scaffold(targetDir: string, options?: ScaffoldOptions) {
       dev: "bun --hot start.ts",
     },
     dependencies: {
-      "@guppy/web": "workspace:*",
+      "@guppy/web": `^${webVersion}`,
       react: "^19",
       "react-dom": "^19",
       "react-router": "^7",
