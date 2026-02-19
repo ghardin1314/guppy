@@ -8,3 +8,8 @@ export type { EventStoreService } from "./event-store.ts";
 export { EventBus, EventBusLive } from "./event-bus.ts";
 export type { EventBusService } from "./event-bus.ts";
 export { nanoid } from "./id.ts";
+export { ThreadMessage } from "./thread-message.ts";
+export { AgentFactory, AgentError, PiAgentFactoryLive } from "./agent.ts";
+export type { AgentHandle, CreateAgentConfig } from "./agent.ts";
+export { spawn } from "./agent-thread.ts";
+export type { AgentThreadHandle, AgentThreadConfig } from "./agent-thread.ts";
