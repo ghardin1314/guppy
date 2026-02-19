@@ -29,22 +29,3 @@ export interface Message {
   readonly content: string;
   readonly createdAt: number;
 }
-
-// -- Events -------------------------------------------------------------------
-
-export type EventType = "immediate" | "scheduled" | "cron";
-export type EventStatus = "pending" | "delivered" | "canceled" | "failed";
-
-export interface GuppyEvent {
-  readonly id: string;
-  readonly type: EventType;
-  readonly targetThreadId: string;
-  readonly sourceThreadId: string | null;
-  readonly payload: string;
-  readonly status: EventStatus;
-  readonly scheduledAt: number | null;
-  readonly cronExpression: string | null;
-  readonly lastFiredAt: number | null;
-  readonly createdAt: number;
-  readonly deliveredAt: number | null;
-}

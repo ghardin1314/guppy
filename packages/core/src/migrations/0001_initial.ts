@@ -30,16 +30,30 @@ export default Effect.gen(function* () {
   `);
 
   yield* sql.unsafe(`
-    CREATE TABLE IF NOT EXISTS _guppy_events (
+    CREATE TABLE IF NOT EXISTS _guppy_schedules (
       id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      target_thread_id TEXT NOT NULL,
-      source_thread_id TEXT,
-      payload TEXT DEFAULT '{}',
+      event_type TEXT NOT NULL,
+      event_data TEXT NOT NULL DEFAULT '{}',
+      schedule_type TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       scheduled_at INTEGER,
       cron_expression TEXT,
       last_fired_at INTEGER,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
+  yield* sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS _guppy_deliveries (
+      id TEXT PRIMARY KEY,
+      schedule_id TEXT REFERENCES _guppy_schedules(id),
+      subscriber_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      event_data TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      max_retries INTEGER NOT NULL DEFAULT 3,
+      last_error TEXT,
       created_at INTEGER NOT NULL,
       delivered_at INTEGER
     )

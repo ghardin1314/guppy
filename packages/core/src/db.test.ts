@@ -18,9 +18,10 @@ it.layer(DbTest)("db", (it) => {
       `;
 
       expect(tables.map((t) => t.name)).toEqual([
-        "_guppy_events",
+        "_guppy_deliveries",
         "_guppy_messages",
         "_guppy_migrations",
+        "_guppy_schedules",
         "_guppy_threads",
       ]);
     })
@@ -51,9 +52,10 @@ it.layer(DbTest)("db", (it) => {
       `;
 
       expect(tables.map((t) => t.name)).toEqual([
-        "_guppy_events",
+        "_guppy_deliveries",
         "_guppy_messages",
         "_guppy_migrations",
+        "_guppy_schedules",
         "_guppy_threads",
       ]);
     })

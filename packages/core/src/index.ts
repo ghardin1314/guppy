@@ -1,4 +1,10 @@
 export * from "./types.ts";
+export * from "./schema.ts";
 export { makeDbLayer } from "./db.ts";
 export { ThreadStore, ThreadStoreLive } from "./repository.ts";
 export type { ThreadStoreService } from "./repository.ts";
+export { EventStore, EventStoreLive } from "./event-store.ts";
+export type { EventStoreService } from "./event-store.ts";
+export { EventBus, EventBusLive } from "./event-bus.ts";
+export type { EventBusService } from "./event-bus.ts";
+export { nanoid } from "./id.ts";

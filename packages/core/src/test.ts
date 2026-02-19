@@ -5,7 +5,7 @@
  */
 
 import { test, describe } from "bun:test";
-import { Effect, Layer, Scope, TestServices } from "effect";
+import { Effect, Layer, Scope, TestClock, TestServices } from "effect";
 
 type EffectFn<R> = () => Effect.Effect<void, unknown, R>;
 
@@ -16,8 +16,8 @@ interface Tester<R> {
 }
 
 export interface Methods<R = never> {
-  readonly effect: Tester<TestServices.TestServices | R>;
-  readonly scoped: Tester<TestServices.TestServices | Scope.Scope | R>;
+  readonly effect: Tester<TestServices.TestServices | TestClock.TestClock | R>;
+  readonly scoped: Tester<TestServices.TestServices | TestClock.TestClock | Scope.Scope | R>;
   readonly live: Tester<R>;
   readonly layer: <R2, E>(
     layer: Layer.Layer<R2, E, R>,
@@ -27,8 +27,9 @@ export interface Methods<R = never> {
   };
 }
 
-const TestServicesLayer = Layer.effectContext(
-  Effect.sync(() => TestServices.liveServices),
+const TestServicesLayer = Layer.provideMerge(
+  TestClock.defaultTestClock,
+  Layer.effectContext(Effect.sync(() => TestServices.liveServices)),
 );
 
 function runEffect<R>(
@@ -58,12 +59,12 @@ function makeMethods<R>(baseLayer: Layer.Layer<R>): Methods<R> {
   const withTestServices = Layer.merge(
     baseLayer,
     TestServicesLayer,
-  ) as Layer.Layer<TestServices.TestServices | R>;
+  ) as Layer.Layer<TestServices.TestServices | TestClock.TestClock | R>;
 
   const withScope = Layer.merge(
     withTestServices,
     Layer.scope,
-  ) as Layer.Layer<TestServices.TestServices | Scope.Scope | R>;
+  ) as Layer.Layer<TestServices.TestServices | TestClock.TestClock | Scope.Scope | R>;
 
   return {
     effect: makeTester(withTestServices),
