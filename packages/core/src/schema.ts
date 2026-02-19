@@ -28,7 +28,7 @@ export type DelayedScheduleTiming = Schema.Schema.Type<
 
 export const CronScheduleTiming = Schema.Struct({
   type: ScheduleType.pipe(Schema.pickLiteral("cron")),
-  /** Standard 5-field cron expression, e.g. "0 9 * * MON" (every Monday 9AM) */
+  /** 5-field cron (min hr day mon wday) or 6-field with seconds prefix. e.g. "0 9 * * MON" */
   cronExpression: Schema.String,
 });
 export type CronScheduleTiming = Schema.Schema.Type<typeof CronScheduleTiming>;

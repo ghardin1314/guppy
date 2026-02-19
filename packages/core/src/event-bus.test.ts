@@ -3,6 +3,7 @@ import {
   Context,
   DateTime,
   Effect,
+  Either,
   Layer,
   ManagedRuntime,
   Schema,
@@ -166,6 +167,92 @@ it.layer(SubscribedLayer)("event-bus: subscriber", (it) => {
       yield* TestClock.adjust("10 seconds");
       yield* Effect.yieldNow();
       expect(yield* sub.received).toHaveLength(0);
+    }),
+  );
+});
+
+// -- Cron delivery tests ------------------------------------------------------
+
+it.layer(SubscribedLayer)("event-bus: cron", (it) => {
+  it.effect("cron fires at the right time", () =>
+    Effect.gen(function* () {
+      const bus = yield* EventBus;
+      const sub = yield* TestSubscriber;
+
+      yield* bus.schedule(agentMsg("cron-1", '{"cron":true}'), {
+        type: "cron",
+        cronExpression: "* * * * *",
+      });
+
+      expect(yield* sub.received).toHaveLength(0);
+
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.yieldNow();
+
+      const received = yield* sub.received;
+      expect(received).toHaveLength(1);
+      expect(received[0]!.payload).toBe('{"cron":true}');
+    }),
+  );
+
+  it.effect("cron fires repeatedly across ticks", () =>
+    Effect.gen(function* () {
+      const bus = yield* EventBus;
+      const sub = yield* TestSubscriber;
+
+      yield* bus.schedule(agentMsg("cron-2", '{"repeat":true}'), {
+        type: "cron",
+        cronExpression: "* * * * *",
+      });
+
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.yieldNow();
+      expect(yield* sub.received).toHaveLength(1);
+
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.yieldNow();
+      expect(yield* sub.received).toHaveLength(2);
+
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.yieldNow();
+      expect(yield* sub.received).toHaveLength(3);
+    }),
+  );
+
+  it.effect("cron cancel stops future fires", () =>
+    Effect.gen(function* () {
+      const bus = yield* EventBus;
+      const sub = yield* TestSubscriber;
+
+      const schedule = yield* bus.schedule(agentMsg("cron-cancel", "{}"), {
+        type: "cron",
+        cronExpression: "* * * * *",
+      });
+
+      yield* TestClock.adjust("1 minute");
+      yield* Effect.yieldNow();
+      expect(yield* sub.received).toHaveLength(1);
+
+      yield* bus.cancel(schedule.id);
+
+      yield* TestClock.adjust("5 minutes");
+      yield* Effect.yieldNow();
+      expect(yield* sub.received).toHaveLength(1);
+    }),
+  );
+
+  it.effect("invalid cron expression is rejected", () =>
+    Effect.gen(function* () {
+      const bus = yield* EventBus;
+
+      const result = yield* bus
+        .schedule(agentMsg("cron-bad", "{}"), {
+          type: "cron",
+          cronExpression: "not a cron",
+        })
+        .pipe(Effect.either);
+
+      expect(Either.isLeft(result)).toBe(true);
     }),
   );
 });
