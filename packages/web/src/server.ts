@@ -47,7 +47,7 @@ export async function createServer(
     return handler(req, { params: match.params, query: match.query });
   }
 
-  const port = options?.port ?? 3456;
+  const port = options?.port ?? (process.env.PORT ? Number(process.env.PORT) : 3456);
 
   const server = Bun.serve({
     port,

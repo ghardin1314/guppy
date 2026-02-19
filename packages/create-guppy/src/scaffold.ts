@@ -47,9 +47,6 @@ export async function scaffold(targetDir: string, options?: ScaffoldOptions) {
 
   await Bun.write(join(targetDir, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
 
-  // Verify files were copied
   const files = await readdir(targetDir, { recursive: true });
-  console.log(`[scaffold] Created ${files.length} files in ${targetDir}`);
-
   return { targetDir, files };
 }

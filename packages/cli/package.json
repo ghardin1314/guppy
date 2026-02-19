@@ -3,14 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "guppy": "./src/bin.ts"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
+    "@clack/prompts": "^0.9",
     "@guppy/core": "workspace:*",
-    "@guppy/web": "workspace:*"
+    "@guppy/web": "workspace:*",
+    "commander": "^13",
+    "create-guppy": "workspace:*"
   }
 }
