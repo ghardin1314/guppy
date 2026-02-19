@@ -5,3 +5,4 @@ test-data.sqlite
 workspace/
 workspace-test/
 .env
+test-data.*

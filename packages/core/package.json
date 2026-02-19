@@ -6,6 +6,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
   "dependencies": {
     "@effect/experimental": "^0.58.0",
     "@effect/platform": "^0.94.5",

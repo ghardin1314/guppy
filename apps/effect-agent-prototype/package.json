@@ -1,6 +1,9 @@
 {
   "name": "effect-agent-prototype",
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@guppy/core": "workspace:*",
     "@mariozechner/pi-ai": "^0.53.0",

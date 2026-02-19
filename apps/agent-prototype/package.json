@@ -1,6 +1,10 @@
 {
   "name": "agent-prototype",
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.53.0",
     "@mariozechner/pi-agent-core": "^0.53.0",

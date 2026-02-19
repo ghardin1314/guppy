@@ -1,6 +1,9 @@
 {
   "name": "effect-prototype",
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
