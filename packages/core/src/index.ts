@@ -1,36 +1,39 @@
-export * from "./types.ts";
-export * from "./schema.ts";
+export { spawn } from "./agent-thread.ts";
+export type { AgentThreadConfig, AgentThreadHandle } from "./agent-thread.ts";
+export { AgentError, AgentFactory, PiAgentFactoryLive } from "./agent.ts";
+export type { AgentHandle, CreateAgentConfig } from "./agent.ts";
 export { makeDbLayer } from "./db.ts";
-export { ThreadStore, ThreadStoreLive } from "./repository.ts";
-export type { ThreadStoreService } from "./repository.ts";
-export { EventStore, EventStoreLive } from "./event-store.ts";
-export type { EventStoreService } from "./event-store.ts";
 export { EventBus, EventBusLive } from "./event-bus.ts";
 export type { EventBusService } from "./event-bus.ts";
+export { EventStore, EventStoreLive } from "./event-store.ts";
+export type { EventStoreService } from "./event-store.ts";
 export { nanoid } from "./id.ts";
-export { ThreadMessage } from "./thread-message.ts";
-export { AgentFactory, AgentError, PiAgentFactoryLive } from "./agent.ts";
-export type { AgentHandle, CreateAgentConfig } from "./agent.ts";
-export { spawn } from "./agent-thread.ts";
-export type { AgentThreadHandle, AgentThreadConfig } from "./agent-thread.ts";
-export { TransportService } from "./transport.ts";
-export type { Transport } from "./transport.ts";
+export { Orchestrator, OrchestratorError } from "./orchestrator.ts";
+export type {
+  OrchestratorSendError,
+  OrchestratorService,
+} from "./orchestrator.ts";
+export { ThreadStore, ThreadStoreLive } from "./repository.ts";
+export type { ThreadStoreService } from "./repository.ts";
+export * from "./schema.ts";
 export {
-  TransportRegistry,
-  TransportRegistryLive,
-  TransportNotFoundError,
-} from "./transport-registry.ts";
-export type { TransportRegistryService } from "./transport-registry.ts";
-export { TransportMap } from "./transport-map.ts";
-export { Orchestrator, OrchestratorLive } from "./orchestrator.ts";
-export type { OrchestratorService } from "./orchestrator.ts";
-export {
+  collectUntilEnd,
   EchoAgentFactoryLive,
   makeInstrumentedAgentFactory,
-  makeTestTransport,
   makeRegisteredTestTransport,
+  makeTestTransport,
   testConfig,
-  collectUntilEnd,
   withThread,
 } from "./testing.ts";
-export type { TestTransportState, InstrumentedAgentState } from "./testing.ts";
+export type { InstrumentedAgentState, TestTransportState } from "./testing.ts";
+export { ThreadMessage } from "./thread-message.ts";
+export { TransportMap } from "./transport-map.ts";
+export {
+  TransportNotFoundError,
+  TransportRegistry,
+  TransportRegistryLive,
+} from "./transport-registry.ts";
+export type { TransportRegistryService } from "./transport-registry.ts";
+export { TransportService } from "./transport.ts";
+export type { Transport } from "./transport.ts";
+export * from "./types.ts";

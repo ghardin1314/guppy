@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import { Effect, Layer } from "effect";
 import { makeDbLayer } from "./db.ts";
 import { ThreadStoreLive, ThreadStore } from "./repository.ts";
-import { Orchestrator, OrchestratorLive } from "./orchestrator.ts";
+import { Orchestrator } from "./orchestrator.ts";
 import { TransportRegistryLive } from "./transport-registry.ts";
 import { TransportMap } from "./transport-map.ts";
 import { ThreadMessage } from "./thread-message.ts";
@@ -41,7 +41,7 @@ const RegisterALayer = Layer.provide(RegisterATransport, RegistryLayer);
 const RegisterBLayer = Layer.provide(RegisterBTransport, RegistryLayer);
 
 const OrchestratorLayer = Layer.provide(
-  OrchestratorLive(testConfig),
+  Orchestrator.layer(testConfig),
   Layer.mergeAll(StoreLayer, EchoAgentFactoryLive, TransportMapLayer),
 );
 

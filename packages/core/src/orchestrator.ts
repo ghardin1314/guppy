@@ -6,7 +6,6 @@
  * No lifecycle management leaks to callers.
  */
 
-import type { SqlError } from "@effect/sql";
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import {
   Context,
@@ -15,6 +14,7 @@ import {
   HashMap,
   Layer,
   Ref,
+  Schema,
   Scope,
   Stream,
 } from "effect";
@@ -29,7 +29,24 @@ import { ThreadMessage } from "./thread-message.ts";
 import { TransportMap } from "./transport-map.ts";
 import { TransportNotFoundError } from "./transport-registry.ts";
 
+// -- Errors -------------------------------------------------------------------
+const OrchestratorErrorReason = Schema.Literal("STORAGE_ERROR");
+
+export class OrchestratorError extends Schema.TaggedError<OrchestratorError>()(
+  "OrchestratorError",
+  {
+    message: Schema.String,
+    reason: OrchestratorErrorReason,
+    cause: Schema.Unknown.pipe(Schema.optional),
+  },
+) {}
+
 // -- Service interface --------------------------------------------------------
+
+export type OrchestratorSendError =
+  | OrchestratorError
+  | AgentError
+  | TransportNotFoundError;
 
 export interface OrchestratorService {
   /** Send to a virtual agent thread addressed by (transport, channelId).
@@ -38,16 +55,13 @@ export interface OrchestratorService {
     transport: string,
     channelId: string,
     msg: ThreadMessage,
-  ) => Effect.Effect<
-    void,
-    SqlError.SqlError | AgentError | TransportNotFoundError
-  >;
+  ) => Effect.Effect<void, OrchestratorSendError>;
 
   /** Get event stream for a thread. Returns null if not currently spawned. */
   readonly events: (
     transport: string,
     channelId: string,
-  ) => Effect.Effect<Stream.Stream<AgentEvent> | null, SqlError.SqlError>;
+  ) => Effect.Effect<Stream.Stream<AgentEvent> | null, OrchestratorError>;
 }
 
 // -- Tag ----------------------------------------------------------------------
@@ -55,72 +69,105 @@ export interface OrchestratorService {
 export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
   Orchestrator,
   OrchestratorService
->() {}
-
-// -- Live implementation ------------------------------------------------------
-
-export const OrchestratorLive = (
-  config: AgentThreadConfig,
-): Layer.Layer<
-  Orchestrator,
-  never,
-  AgentFactory | ThreadStore | TransportMap
-> =>
-  Layer.scoped(
+>() {
+  static layer = (
+    config: AgentThreadConfig,
+  ): Layer.Layer<
     Orchestrator,
-    Effect.gen(function* () {
-      const store = yield* ThreadStore;
-      const transportMap = yield* TransportMap;
-      const scope = yield* Effect.scope;
-      const spawnCtx = yield* Effect.context<AgentFactory | ThreadStore>();
+    never,
+    AgentFactory | ThreadStore | TransportMap
+  > =>
+    Layer.scoped(
+      Orchestrator,
+      Effect.gen(function* () {
+        const store = yield* ThreadStore;
+        const transportMap = yield* TransportMap;
+        const scope = yield* Effect.scope;
+        const spawnCtx = yield* Effect.context<AgentFactory | ThreadStore>();
 
-      const threads = yield* Ref.make(
-        HashMap.empty<string, AgentThreadHandle>(),
-      );
+        const threads = yield* Ref.make(
+          HashMap.empty<string, AgentThreadHandle>(),
+        );
 
-      const getOrSpawn = (
-        threadId: string,
-        transportName: string,
-      ): Effect.Effect<
-        AgentThreadHandle,
-        SqlError.SqlError | AgentError | TransportNotFoundError
-      > =>
-        Effect.gen(function* () {
-          const map = yield* Ref.get(threads);
-          const existing = HashMap.get(map, threadId);
-          if (existing._tag === "Some") return existing.value;
-
-          const threadScope = yield* Scope.fork(
-            scope,
-            ExecutionStrategy.sequential,
-          );
-
-          const handle = yield* spawn(threadId, config).pipe(
-            Effect.provide(transportMap.get(transportName)),
-            Effect.provide(spawnCtx),
-            Effect.provideService(Scope.Scope, threadScope),
-          );
-
-          yield* Ref.update(threads, HashMap.set(threadId, handle));
-          return handle;
-        });
-
-      return Orchestrator.of({
-        send: (transport, channelId, msg) =>
+        const getOrSpawn = (
+          threadId: string,
+          transportName: string,
+        ): Effect.Effect<
+          AgentThreadHandle,
+          OrchestratorError | AgentError | TransportNotFoundError
+        > =>
           Effect.gen(function* () {
-            const thread = yield* store.getOrCreateThread(transport, channelId);
-            const handle = yield* getOrSpawn(thread.id, thread.transport);
-            yield* handle.send(msg);
-          }),
-
-        events: (transport, channelId) =>
-          Effect.gen(function* () {
-            const thread = yield* store.getOrCreateThread(transport, channelId);
             const map = yield* Ref.get(threads);
-            const entry = HashMap.get(map, thread.id);
-            if (entry._tag === "None") return null;
-            return entry.value.events;
-          }),
-      });
-    }),
-  );
+            const existing = HashMap.get(map, threadId);
+            if (existing._tag === "Some") return existing.value;
+
+            const threadScope = yield* Scope.fork(
+              scope,
+              ExecutionStrategy.sequential,
+            );
+
+            const handle = yield* spawn(threadId, config).pipe(
+              Effect.provide(transportMap.get(transportName)),
+              Effect.provide(spawnCtx),
+              Effect.provideService(Scope.Scope, threadScope),
+            );
+
+            yield* Ref.update(threads, HashMap.set(threadId, handle));
+            return handle;
+          }).pipe(
+            Effect.catchTag(
+              "SqlError",
+              (e) =>
+                new OrchestratorError({
+                  message: "Failed to spawn thread",
+                  reason: "STORAGE_ERROR",
+                  cause: e,
+                }),
+            ),
+          );
+
+        return Orchestrator.of({
+          send: (transport, channelId, msg) =>
+            Effect.gen(function* () {
+              const thread = yield* store.getOrCreateThread(
+                transport,
+                channelId,
+              );
+              const handle = yield* getOrSpawn(thread.id, thread.transport);
+              yield* handle.send(msg);
+            }).pipe(
+              Effect.catchTag(
+                "SqlError",
+                (e) =>
+                  new OrchestratorError({
+                    message: "Failed to send message",
+                    reason: "STORAGE_ERROR",
+                    cause: e,
+                  }),
+              ),
+            ),
+
+          events: (transport, channelId) =>
+            Effect.gen(function* () {
+              const thread = yield* store.getOrCreateThread(
+                transport,
+                channelId,
+              );
+              const map = yield* Ref.get(threads);
+              const entry = HashMap.get(map, thread.id);
+              if (entry._tag === "None") return null;
+              return entry.value.events;
+            }).pipe(
+              Effect.mapError(
+                (e) =>
+                  new OrchestratorError({
+                    message: "Failed to get events",
+                    reason: "STORAGE_ERROR",
+                    cause: e,
+                  }),
+              ),
+            ),
+        });
+      }),
+    );
+}

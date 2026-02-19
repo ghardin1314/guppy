@@ -1,33 +1,31 @@
-import { createInterface } from "node:readline";
-import { resolve } from "node:path";
-import { Effect, Fiber, Layer, Scope, Exit, Stream } from "effect";
-import { getModel } from "@mariozechner/pi-ai";
-import type { AgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
 import {
   makeDbLayer,
+  Orchestrator,
+  PiAgentFactoryLive,
   ThreadStore,
   ThreadStoreLive,
-  PiAgentFactoryLive,
-  spawn,
-  ThreadMessage,
+  TransportMap,
+  TransportRegistryLive,
   type AgentThreadConfig,
-  type Thread,
 } from "@guppy/core";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { getModel } from "@mariozechner/pi-ai";
+import { Effect, Layer } from "effect";
+import { resolve } from "node:path";
+import { createInterface } from "node:readline";
+import {
+  TerminalTransport,
+  TerminalTransportLive,
+} from "./terminal-transport.ts";
+import { createBashTool } from "./tools/bash.ts";
+import { createEditTool } from "./tools/edit.ts";
 import { createReadTool } from "./tools/read.ts";
 import { createWriteTool } from "./tools/write.ts";
-import { createEditTool } from "./tools/edit.ts";
-import { createBashTool } from "./tools/bash.ts";
 
 // -- Paths --------------------------------------------------------------------
 
 const DB_PATH = resolve(import.meta.dir, "data.sqlite");
 const WORKSPACE_DIR = resolve(import.meta.dir, "workspace");
-
-// -- Layers -------------------------------------------------------------------
-
-const DbLayer = makeDbLayer(DB_PATH);
-const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
-const AppLayer = Layer.merge(StoreLayer, PiAgentFactoryLive);
 
 // -- Agent config -------------------------------------------------------------
 
@@ -47,87 +45,83 @@ const agentConfig: AgentThreadConfig = {
   tools,
 };
 
+// -- Layers -------------------------------------------------------------------
+
+const DbLayer = makeDbLayer(DB_PATH);
+const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
+
+const RegistryLayer = TransportRegistryLive;
+
+const TransportMapLayer = Layer.provide(
+  TransportMap.DefaultWithoutDependencies,
+  RegistryLayer,
+);
+
+const OrchestratorLayer = Layer.provide(
+  Orchestrator.layer(agentConfig),
+  Layer.mergeAll(StoreLayer, PiAgentFactoryLive, TransportMapLayer),
+);
+
+const TerminalLayer = Layer.provide(
+  TerminalTransportLive,
+  Layer.mergeAll(OrchestratorLayer, RegistryLayer),
+);
+
+const AppLayer = Layer.mergeAll(StoreLayer, OrchestratorLayer, TerminalLayer);
+
 // -- Readline -----------------------------------------------------------------
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-const askLine = Effect.promise<string>(
-  () => new Promise<string>((res) => rl.question("> ", res)),
-).pipe(Effect.map((s) => s.trim()));
-
-// -- Event rendering ----------------------------------------------------------
-
-let streamingText = false;
-
-function renderEvent(event: AgentEvent): Effect.Effect<void> {
-  return Effect.sync(() => {
-    switch (event.type) {
-      case "message_update": {
-        const ame = event.assistantMessageEvent;
-        if (ame.type === "text_delta") {
-          if (!streamingText) {
-            streamingText = true;
-            process.stdout.write("\n");
-          }
-          process.stdout.write(ame.delta);
-        }
-        break;
-      }
-      case "message_end":
-        if (streamingText) {
-          process.stdout.write("\n");
-          streamingText = false;
-        }
-        break;
-      case "tool_execution_start":
-        console.log(
-          `\n[${event.toolName}] ${JSON.stringify(event.args).slice(0, 120)}`,
-        );
-        break;
-      case "tool_execution_end": {
-        const result = event.result;
-        if (result?.content) {
-          for (const block of result.content) {
-            if (block.type === "text") {
-              const text =
-                block.text.length > 500
-                  ? block.text.slice(0, 500) +
-                    `\n... (${block.text.length} chars)`
-                  : block.text;
-              console.log(`  → ${text}`);
-            }
-          }
-        }
-        if (event.isError) {
-          console.log(`  [${event.toolName}] ERROR`);
-        }
-        break;
-      }
-    }
+const readLine = (prompt: string) =>
+  Effect.async<string>((resume) => {
+    const ac = new AbortController();
+    rl.question(prompt, { signal: ac.signal }, (answer) => {
+      resume(Effect.succeed(answer.trim()));
+    });
+    return Effect.sync(() => ac.abort());
   });
-}
 
-// -- Spawn helper -------------------------------------------------------------
+const askLine = readLine("> ");
 
-const spawnThread = (threadId: string) =>
+/**
+ * After sending a prompt/followup, race agent completion against
+ * a steering input loop. Typing mid-stream sends a steering message;
+ * typing "/stop" aborts the agent.
+ */
+const waitWithSteering = (channelId: string) =>
   Effect.gen(function* () {
-    const scope = yield* Scope.make();
-    const handle = yield* spawn(threadId, agentConfig).pipe(
-      Effect.provideService(Scope.Scope, scope),
+    const t = yield* TerminalTransport;
+    yield* Effect.race(
+      t.waitForAgentEnd,
+      Effect.gen(function* () {
+        while (true) {
+          const line = yield* readLine("");
+          if (!line) continue;
+          if (line === "/stop") {
+            yield* t.stop(channelId);
+          } else {
+            yield* t.steer(channelId, line);
+          }
+        }
+      }),
     );
-    return { scope, handle };
   });
 
 // -- Main ---------------------------------------------------------------------
 
 const main = Effect.gen(function* () {
   const store = yield* ThreadStore;
+  const t = yield* TerminalTransport;
 
-  let thread: Thread = yield* store.getOrCreateThread("cli", "default");
-  let { scope, handle } = yield* spawnThread(thread.id);
+  let channelId = "default";
+  let thread = yield* store.getOrCreateThread("terminal", channelId);
 
   console.log("Effect agent prototype ready.");
-  console.log("Commands: /new, /threads, /switch <id>, /quit\n");
+  console.log(
+    "Commands: /new, /threads, /switch <id>, /followup <text>, /quit",
+  );
+  console.log("Type mid-stream to steer. /stop to abort.\n");
   console.log(`Thread: ${thread.id.slice(0, 8)}...\n`);
 
   let running = true;
@@ -146,16 +140,14 @@ const main = Effect.gen(function* () {
           break;
 
         case "/new": {
-          yield* Scope.close(scope, Exit.void);
-          const channelId = crypto.randomUUID().slice(0, 8);
-          thread = yield* store.getOrCreateThread("cli", channelId);
-          ({ scope, handle } = yield* spawnThread(thread.id));
+          channelId = crypto.randomUUID().slice(0, 8);
+          thread = yield* store.getOrCreateThread("terminal", channelId);
           console.log(`New thread: ${thread.id.slice(0, 8)}...`);
           break;
         }
 
         case "/threads": {
-          const threads = yield* store.listThreads("cli");
+          const threads = yield* store.listThreads("terminal");
           if (threads.length === 0) {
             console.log("No threads.");
             break;
@@ -176,18 +168,33 @@ const main = Effect.gen(function* () {
             console.log("Usage: /switch <id-prefix>");
             break;
           }
-          const threads = yield* store.listThreads("cli");
+          const threads = yield* store.listThreads("terminal");
           const match = threads.find((t) => t.id.startsWith(prefix));
           if (!match) {
             console.log(`No thread matching '${prefix}'`);
             break;
           }
-          yield* Scope.close(scope, Exit.void);
           thread = match;
-          ({ scope, handle } = yield* spawnThread(thread.id));
+          channelId = thread.channelId;
           console.log(`Switched to thread: ${thread.id.slice(0, 8)}...`);
           break;
         }
+
+        case "/followup": {
+          const content = args.join(" ");
+          if (!content) {
+            console.log("Usage: /followup <text>");
+            break;
+          }
+          yield* t.followUp(channelId, content);
+          yield* waitWithSteering(channelId);
+          console.log();
+          break;
+        }
+
+        case "/stop":
+          console.log("(no active stream)");
+          break;
 
         default:
           console.log(`Unknown command: ${cmd}`);
@@ -197,25 +204,12 @@ const main = Effect.gen(function* () {
 
     // -- Prompt ---------------------------------------------------------------
 
-    try {
-      const eventsFiber = yield* handle.events.pipe(
-        Stream.takeUntil((e) => e.type === "agent_end"),
-        Stream.runForEach(renderEvent),
-        Effect.fork,
-      );
-
-      yield* handle.send(ThreadMessage.Prompt({ content: input }));
-      yield* Fiber.join(eventsFiber);
-    } catch (err) {
-      console.error(
-        `\nError: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    yield* t.prompt(channelId, input);
+    yield* waitWithSteering(channelId);
 
     console.log();
   }
 
-  yield* Scope.close(scope, Exit.void);
   rl.close();
 });
 
