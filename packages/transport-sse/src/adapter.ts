@@ -8,7 +8,7 @@
 import { Effect } from "effect";
 import type { Guppy } from "@guppy/core";
 import { ThreadId, ThreadMessage } from "@guppy/core";
-import { SseTransport } from "./sse-transport.ts";
+import { SseEventMessage, SseTransport } from "./sse-transport.ts";
 
 export class SseTransportAdapter {
   constructor(private readonly guppy: Guppy<SseTransport>) {}
@@ -17,7 +17,7 @@ export class SseTransportAdapter {
     return this.guppy.runEffect(effect);
   }
 
-  addListener(threadId: string, send: (data: string) => void) {
+  addListener(threadId: string, send: (data: SseEventMessage) => void) {
     return this.run(
       Effect.flatMap(SseTransport, (sse) =>
         sse.addListener(ThreadId.make(threadId), send),
@@ -25,7 +25,7 @@ export class SseTransportAdapter {
     );
   }
 
-  removeListener(threadId: string, send: (data: string) => void) {
+  removeListener(threadId: string, send: (data: SseEventMessage) => void) {
     return this.run(
       Effect.flatMap(SseTransport, (sse) =>
         sse.removeListener(ThreadId.make(threadId), send),

@@ -7,10 +7,7 @@ import {
   models,
   type AgentTool,
 } from "@guppy/core";
-import {
-  SseTransportLive,
-  SseTransportAdapter,
-} from "@guppy/transport-sse";
+import { SseTransportAdapter, SseTransportLive } from "@guppy/transport-sse";
 import { createServer } from "@guppy/web";
 import { router } from "./procedures/index";
 
@@ -25,14 +22,12 @@ const tools: AgentTool<any>[] = [
   createBashTool(workspaceDir),
 ];
 
-
-
 const guppy = Guppy.create({
   projectDir: workspaceDir,
   agent: {
     model: models.kimiK25,
     systemPrompt:
-      "You are a helpful coding assistant. You have access to tools for reading files and running bash commands. Be concise in your responses.",
+      "You are a helpful coding assistant. You have access to tools for reading files and running bash commands. Be concise in your responses. All files you create should go in the ./data directory.",
     tools,
   },
 }).register(SseTransportLive);

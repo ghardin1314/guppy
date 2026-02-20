@@ -11,6 +11,7 @@
  */
 
 import {
+  AgentResponseEvent,
   Orchestrator,
   ThreadId,
   ThreadMessage,
@@ -19,10 +20,10 @@ import {
   type OrchestratorSendError,
 } from "@guppy/core";
 import {
+  Clock,
   Context,
   Effect,
   Fiber,
-  flow,
   HashMap,
   HashSet,
   Layer,
@@ -37,36 +38,34 @@ import {
 export const AgentEventMessage = Schema.Struct({
   type: Schema.Literal("agent_event"),
   threadId: Schema.String,
-  event: Schema.Unknown,
+  event: AgentResponseEvent,
 });
 
 export type AgentEventMessage = Schema.Schema.Type<typeof AgentEventMessage>;
 
-// -- Broadcast message (pre-encoded, published to PubSub) --------------------
+export const HeartbeatMessage = Schema.Struct({
+  type: Schema.Literal("heartbeat"),
+  timestamp: Schema.Number,
+});
+export type HeartbeatMessage = Schema.Schema.Type<typeof HeartbeatMessage>;
 
-interface BroadcastMessage {
-  readonly threadId: ThreadId;
-  readonly data: string;
-}
+export const SseEventMessage = Schema.Union(
+  AgentEventMessage,
+  HeartbeatMessage,
+);
+export type SseEventMessage = Schema.Schema.Type<typeof SseEventMessage>;
 
 // -- Internal types -----------------------------------------------------------
 
 const SSE_TRANSPORT = TransportId.make("sse");
 
-type SendFn = (data: string) => void;
+type SendFn = (data: SseEventMessage) => void;
 
 interface ListenerState {
   readonly send: SendFn;
   readonly fiber: Fiber.RuntimeFiber<void, never>;
   readonly heartbeatFiber: Fiber.RuntimeFiber<void, never>;
 }
-
-// -- Encoding helper ----------------------------------------------------------
-
-const encodeAgentEvent = flow(
-  Schema.encode(Schema.parseJson(AgentEventMessage)),
-  Effect.either,
-);
 
 // -- Service interface --------------------------------------------------------
 
@@ -109,21 +108,17 @@ export const SseTransportLive = Layer.scoped(
     const listenersRef = yield* Ref.make(
       HashMap.empty<ThreadId, HashSet.HashSet<ListenerState>>(),
     );
-    const pubsub = yield* PubSub.unbounded<BroadcastMessage>();
+    const pubsub = yield* PubSub.unbounded<SseEventMessage>();
 
     // -- Register "sse" transport with core ------------------------------------
 
     yield* registry.register(SSE_TRANSPORT, {
       getContext: () => Effect.succeed(""),
       deliver: (threadId, event) =>
-        Effect.gen(function* () {
-          const json = yield* encodeAgentEvent({
-            type: "agent_event",
-            threadId,
-            event,
-          });
-          if (json._tag === "Left") return;
-          yield* PubSub.publish(pubsub, { threadId, data: json.right });
+        PubSub.publish(pubsub, {
+          type: "agent_event",
+          threadId,
+          event,
         }),
     });
 
@@ -138,28 +133,21 @@ export const SseTransportLive = Layer.scoped(
             return yield* Effect.forever(
               Effect.gen(function* () {
                 const msg = yield* Queue.take(queue);
-                if (msg.threadId !== threadId) return;
-                yield* Effect.try(() => send(msg.data)).pipe(
+                if (msg.type === "agent_event" && msg.threadId !== threadId) return;
+                yield* Effect.try(() => send(msg)).pipe(
                   Effect.catchAll(() => Effect.void),
                 );
               }),
             );
           }).pipe(Effect.scoped, Effect.forkIn(scope));
 
-          const heartbeatPayload = yield* Schema.encode(
-            Schema.parseJson(AgentEventMessage),
-          )({
-            type: "agent_event",
-            threadId,
-            event: { type: "heartbeat" },
-          }).pipe(Effect.catchAll(() => Effect.succeed("")));
-
           const heartbeatFiber = yield* Effect.forever(
             Effect.gen(function* () {
               yield* Effect.sleep("3 seconds");
-              yield* Effect.try(() => send(heartbeatPayload)).pipe(
-                Effect.catchAll(() => Effect.void),
-              );
+              const now = yield* Clock.currentTimeMillis;
+              yield* Effect.try(() =>
+                send({ type: "heartbeat", timestamp: now }),
+              ).pipe(Effect.catchAll(() => Effect.void));
             }),
           ).pipe(Effect.forkIn(scope));
 

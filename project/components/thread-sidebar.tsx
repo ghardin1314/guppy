@@ -12,7 +12,7 @@ export function ThreadSidebar({ activeThreadId, connected }: ThreadSidebarProps)
   const { data: threads = [] } = useQuery(orpc.threads.list.queryOptions({ input: {} }));
 
   function createThread() {
-    navigate("/chat/" + crypto.randomUUID());
+    navigate("/threads/" + crypto.randomUUID());
   }
 
   return (
@@ -29,7 +29,7 @@ export function ThreadSidebar({ activeThreadId, connected }: ThreadSidebarProps)
         {threads.map((thread) => (
           <button
             key={thread.threadId}
-            onClick={() => navigate("/chat/" + thread.threadId)}
+            onClick={() => navigate("/threads/" + thread.threadId)}
             className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800/50 transition-colors ${
               thread.threadId === activeThreadId
                 ? "bg-zinc-800 text-zinc-100"

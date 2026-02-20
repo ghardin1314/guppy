@@ -5,9 +5,8 @@
  * into the Guppy runtime. Agent threads pull their transport via Effect DI.
  */
 
-import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import { Context, Effect } from "effect";
-import type { ThreadId } from "./schema.ts";
+import type { AgentResponseEvent, ThreadId } from "./schema.ts";
 
 // -- Interface ----------------------------------------------------------------
 
@@ -22,7 +21,7 @@ export interface Transport {
    *  Slack might post on agent_end only, web UI streams everything. */
   readonly deliver: (
     threadId: ThreadId,
-    event: AgentEvent,
+    event: AgentResponseEvent,
   ) => Effect.Effect<void>;
 }
 

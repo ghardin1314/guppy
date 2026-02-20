@@ -8,8 +8,8 @@ import { Clock, Context, Effect, Layer, Schema } from "effect";
 import type { ParseError } from "effect/ParseResult";
 import { nanoid } from "./id.ts";
 import {
+  AgentMessageSchema,
   Message,
-  MessageContent,
   type Thread,
   type ThreadId,
   type TransportId,
@@ -108,7 +108,7 @@ export const ThreadStoreLive = Layer.effect(
           const id = yield* nanoid();
           const ts = yield* Clock.currentTimeMillis;
           const role = content.role;
-          const encoded = yield* Schema.encode(MessageContent)(content);
+          const encoded = yield* Schema.encode(AgentMessageSchema)(content);
           yield* sql`
             INSERT INTO _guppy_messages (id, thread_id, parent_id, role, content, created_at)
             VALUES (${id}, ${threadId}, ${parentId}, ${role}, ${encoded}, ${ts})

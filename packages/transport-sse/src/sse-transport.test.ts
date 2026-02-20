@@ -10,23 +10,17 @@ import {
   testConfig,
   ThreadId,
 } from "@guppy/core";
-import { SseTransport, SseTransportLive } from "./sse-transport.ts";
+import { SseTransport, SseTransportLive, type SseEventMessage } from "./sse-transport.ts";
 import { it } from "@guppy/core";
 
 const tid = ThreadId.make;
 
 // -- Mock SSE listener --------------------------------------------------------
 
-interface CapturedEvent {
-  type: string;
-  threadId?: string;
-  event?: unknown;
-}
-
 function mockListener() {
-  const messages: CapturedEvent[] = [];
-  const send = (data: string) => {
-    messages.push(JSON.parse(data));
+  const messages: SseEventMessage[] = [];
+  const send = (data: SseEventMessage) => {
+    messages.push(data);
   };
   return { send, messages };
 }

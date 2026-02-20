@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import { Schema } from "effect";
 import { parseJson } from "effect/Schema";
 
@@ -31,20 +31,27 @@ export type Thread = Schema.Schema.Type<typeof Thread>;
 // -- Messages -----------------------------------------------------------------
 
 // TODO: actually build out the schema for AgentMessage
-export const MessageContent = parseJson(
+export const AgentMessageSchema = parseJson(
   Schema.declare((input: unknown): input is AgentMessage => true),
-).pipe(Schema.asSchema)
+).pipe(Schema.asSchema);
 
 export const Message = Schema.Struct({
   id: Schema.String,
   threadId: ThreadId,
   parentId: Schema.String.pipe(Schema.NullOr),
-  content: MessageContent,
+  content: AgentMessageSchema,
   createdAt: Schema.Number,
 });
 export type Message = Schema.Schema.Type<typeof Message>;
 
+export const AgentResponseEvent = parseJson(
+  Schema.declare((input: unknown): input is AgentEvent => true),
+).pipe(Schema.asSchema);
+export type AgentResponseEvent = Schema.Schema.Type<typeof AgentResponseEvent>;
+
 // -- Events -------------------------------------------------------------------
+
+
 
 export const AgentMessageEvent = Schema.Struct({
   type: Schema.Literal("agent.message"),

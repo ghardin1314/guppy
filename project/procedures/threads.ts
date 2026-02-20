@@ -1,13 +1,20 @@
-import { procedure } from "../lib/procedures";
-import { z } from "zod";
-import { eventIterator, EventPublisher } from "@orpc/server";
 import type { AgentEvent, AgentMessage } from "@guppy/core";
+import type { SseEventMessage } from "@guppy/transport-sse";
+import { eventIterator, EventPublisher } from "@orpc/server";
+import { z } from "zod";
+import { procedure } from "../lib/procedures";
 
 const AgentEventPayload = z.object({
   type: z.literal("agent_event"),
   threadId: z.string(),
   event: z.custom<AgentEvent>(),
 });
+
+const HeartbeatPayload = z.object({
+  type: z.literal("heartbeat"),
+});
+
+const EventPayload = z.union([AgentEventPayload, HeartbeatPayload]);
 
 const ThreadOutput = z.object({
   threadId: z.string(),
@@ -77,14 +84,15 @@ export const steer = procedure
 
 export const events = procedure
   .input(z.object({ threadId: z.string() }))
-  .output(eventIterator(AgentEventPayload))
+  .output(eventIterator(EventPayload))
   .handler(async function* ({ input, context }) {
     const publisher = new EventPublisher<{
-      agentEvent: z.infer<typeof AgentEventPayload>;
+      agentEvent: z.infer<typeof EventPayload>;
     }>();
 
-    const sendFn = (data: string) => {
-      publisher.publish("agentEvent", JSON.parse(data));
+    const sendFn = (data: SseEventMessage) => {
+      console.log("sending event", data);
+      publisher.publish("agentEvent", data);
     };
 
     await context.sse.addListener(input.threadId, sendFn);
