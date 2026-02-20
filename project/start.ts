@@ -12,6 +12,7 @@ import {
   WsTransportAdapter,
 } from "@guppy/transport-ws";
 import { createServer } from "@guppy/web";
+import { router } from "./procedures/index";
 
 // shell.html must be a static import so Bun's bundler processes it.
 import shell from "./shell.html";
@@ -36,4 +37,4 @@ const guppy = Guppy.create({
 
 await guppy.boot();
 const ws = new WsTransportAdapter(guppy);
-await createServer(workspaceDir, shell, { guppy, ws });
+await createServer(workspaceDir, shell, { guppy, ws, router });

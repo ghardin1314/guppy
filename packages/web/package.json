@@ -10,7 +10,10 @@
   },
   "dependencies": {
     "@guppy/core": "workspace:*",
-    "@guppy/transport-ws": "workspace:*"
+    "@guppy/transport-ws": "workspace:*",
+    "@orpc/openapi": "^1.13.5",
+    "@orpc/server": "^1.13.5",
+    "zod": "^4.3.6"
   },
   "files": ["src"]
 }

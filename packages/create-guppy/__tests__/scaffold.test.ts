@@ -52,7 +52,9 @@ describe("scaffold", () => {
       expect(fileSet.has(".gitignore")).toBe(true);
       expect(fileSet.has(join("pages", "index.tsx"))).toBe(true);
       expect(fileSet.has(join("pages", "chat.tsx"))).toBe(true);
-      expect(fileSet.has(join("routes", "health.ts"))).toBe(true);
+      expect(fileSet.has(join("procedures", "health.ts"))).toBe(true);
+      expect(fileSet.has(join("procedures", "threads.ts"))).toBe(true);
+      expect(fileSet.has(join("procedures", "index.ts"))).toBe(true);
       expect(fileSet.has(join("styles", "global.css"))).toBe(true);
       // Tools now live in @guppy/core, not scaffolded locally
       expect(fileSet.has(join("tools", "read.ts"))).toBe(false);

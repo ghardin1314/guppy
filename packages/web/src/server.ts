@@ -1,14 +1,11 @@
 import type { Guppy } from "@guppy/core";
 import type { WsTransportAdapter } from "@guppy/transport-ws";
+import type { Router } from "@orpc/server";
 import type { HTMLBundle } from "bun";
 import { watch } from "fs/promises";
 import { generateRoutes } from "./generate-routes.ts";
-
-export interface RouteContext {
-  params: Record<string, string>;
-  query: Record<string, string>;
-  guppy: Guppy;
-}
+import { createRpcHandlers } from "./rpc-handler.ts";
+import type { GuppyContext } from "./rpc.ts";
 
 interface WsData {
   channelId: string;
@@ -17,16 +14,12 @@ interface WsData {
 export async function createServer(
   projectDir: string,
   shell: HTMLBundle,
-  options: { guppy: Guppy; ws: WsTransportAdapter; port?: number },
+  options: { guppy: Guppy; ws: WsTransportAdapter; router: Router<any, GuppyContext>; port?: number },
 ) {
   await generateRoutes(projectDir);
 
-  const apiRouter = new Bun.FileSystemRouter({
-    style: "nextjs",
-    dir: `${projectDir}/routes`,
-  });
-
-  const { guppy, ws } = options;
+  const { guppy, ws, router } = options;
+  const { handleRpc, handleApi } = createRpcHandlers(router, guppy);
 
   // Watch pages/ → regenerate route manifest (new routes only)
   // Bun's built-in HMR handles pushing client updates for existing pages
@@ -43,35 +36,6 @@ export async function createServer(
   }
   watchPages();
 
-  // Watch routes/ → reload API router
-  async function watchRoutes() {
-    for await (const event of watch(`${projectDir}/routes`, {
-      recursive: true,
-    })) {
-      console.log(
-        `[watch] routes changed: ${event.eventType} ${event.filename ?? ""}`,
-      );
-      apiRouter.reload();
-    }
-  }
-  watchRoutes();
-
-  async function handleAPI(req: Request): Promise<Response> {
-    const url = new URL(req.url);
-    const apiPath = url.pathname.replace(/^\/api/, "");
-    const match = apiRouter.match(apiPath);
-    if (!match) return new Response("Not found", { status: 404 });
-
-    const mod = await import(match.filePath);
-    const handler = mod[req.method] ?? mod.default;
-    if (!handler) return new Response("Method not allowed", { status: 405 });
-    return handler(req, {
-      params: match.params,
-      query: match.query,
-      guppy,
-    } satisfies RouteContext);
-  }
-
   const port =
     options.port ?? (process.env.PORT ? Number(process.env.PORT) : 3456);
 
@@ -79,7 +43,8 @@ export async function createServer(
     port,
 
     routes: {
-      "/api/*": handleAPI,
+      "/rpc/*": handleRpc,
+      "/api/*": handleApi,
       "/*": shell,
     },
 
@@ -123,6 +88,7 @@ export async function createServer(
 
   Project: ${projectDir}
   Pages:   http://localhost:${server.port}/
+  RPC:     http://localhost:${server.port}/rpc
   API:     http://localhost:${server.port}/api/health
   WS:      ws://localhost:${server.port}/ws
 `);

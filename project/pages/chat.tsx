@@ -1,13 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ServerMessage } from "@guppy/transport-ws";
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import { orpc } from "../lib/rpc";
 
 // -- Types --------------------------------------------------------------------
-
-interface Thread {
-  id: string;
-  title: string;
-}
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -77,7 +74,8 @@ function useGuppySocket() {
 
 export default function ChatPage() {
   const { connected, send, onMessage } = useGuppySocket();
-  const [threads, setThreads] = useState<Thread[]>([]);
+  const qc = useQueryClient();
+  const { data: threads = [] } = useQuery(orpc.threads.list.queryOptions({ input: {} }));
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Map<string, ChatMessage[]>>(new Map());
   const [tools, setTools] = useState<Map<string, ToolExecution>>(new Map());
@@ -108,6 +106,7 @@ export default function ChatPage() {
 
       case "agent_end":
         setStreaming(false);
+        qc.invalidateQueries({ queryKey: orpc.threads.key() });
         break;
 
       case "message_start":
@@ -175,11 +174,6 @@ export default function ChatPage() {
 
   function createThread() {
     const id = crypto.randomUUID();
-    const thread: Thread = {
-      id,
-      title: `Thread ${threads.length + 1}`,
-    };
-    setThreads((prev) => [...prev, thread]);
     setActiveThreadId(id);
     send({ type: "subscribe", threadId: id });
   }
@@ -211,6 +205,8 @@ export default function ChatPage() {
     setTools(new Map());
 
     send({ type: "prompt", threadId: activeThreadId, content });
+    // Thread is created server-side on first prompt; refresh list after a delay
+    setTimeout(() => qc.invalidateQueries({ queryKey: orpc.threads.key() }), 1000);
     inputRef.current?.focus();
   }
 
@@ -248,15 +244,15 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto">
           {threads.map((thread) => (
             <button
-              key={thread.id}
-              onClick={() => switchThread(thread.id)}
+              key={thread.threadId}
+              onClick={() => switchThread(thread.threadId)}
               className={`w-full text-left px-4 py-3 text-sm border-b border-zinc-800/50 transition-colors ${
-                thread.id === activeThreadId
+                thread.threadId === activeThreadId
                   ? "bg-zinc-800 text-zinc-100"
                   : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
               }`}
             >
-              {thread.title}
+              Thread {thread.threadId.slice(0, 8)}
             </button>
           ))}
         </div>

@@ -190,6 +190,21 @@ export class Guppy<Extra = never> {
     );
   }
 
+  // TODO: replace with a proper typed data-access layer instead of raw SQL
+  /** Run a raw SQL query against the core database. */
+  query<T extends object = Record<string, unknown>>(
+    sql: string,
+    ...params: unknown[]
+  ): Promise<ReadonlyArray<T>> {
+    if (!this.runtime) throw new Error("Guppy not booted");
+    return this.runtime.runPromise(
+      Effect.gen(function* () {
+        const client = yield* SqlClient.SqlClient;
+        return yield* client.unsafe<T>(sql, params);
+      }),
+    );
+  }
+
   async shutdown(): Promise<void> {
     if (!this.runtime) return;
     await this.runtime.dispose();

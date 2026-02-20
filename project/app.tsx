@@ -1,6 +1,8 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, RouterProvider, Link } from "react-router";
 import { createRoot } from "react-dom/client";
-import { routes } from "./.guppy/routes.gen.ts";
+import { queryClient } from "./lib/rpc";
+import { routes } from "./.guppy/routes.gen";
 
 function NotFound() {
   return (
@@ -20,4 +22,8 @@ const router = createBrowserRouter([
 ]);
 
 const root = (import.meta.hot!.data.root ??= createRoot(document.getElementById("root")!));
-root.render(<RouterProvider router={router} />);
+root.render(
+  <QueryClientProvider client={queryClient}>
+    <RouterProvider router={router} />
+  </QueryClientProvider>,
+);
