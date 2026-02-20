@@ -18,8 +18,10 @@ export async function createServer(
   const { handleRpc, handleApi } = createRpcHandlers(router, guppy, sse);
 
   // Watch pages/ → regenerate route manifest (new routes only)
-  // Bun's built-in HMR handles pushing client updates for existing pages
+  // Bun's built-in HMR handles pushing client updates for existing pages.
+  // Debounce collapses rapid FS events during file rewrites into one call.
   async function watchPages() {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     for await (const event of watch(`${projectDir}/pages`, {
       recursive: true,
     })) {
@@ -27,7 +29,11 @@ export async function createServer(
       console.log(
         `[watch] pages changed: ${event.eventType} ${event.filename ?? ""}`,
       );
-      await generateRoutes(projectDir);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        generateRoutes(projectDir);
+      }, 200);
     }
   }
   watchPages();

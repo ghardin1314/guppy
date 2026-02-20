@@ -14,24 +14,39 @@ import { router } from "./procedures/index";
 // shell.html must be a static import so Bun's bundler processes it.
 import shell from "./shell.html";
 
-const workspaceDir = import.meta.dir;
-const tools: AgentTool<any>[] = [
-  createReadTool(workspaceDir),
-  createWriteTool(workspaceDir),
-  createEditTool(workspaceDir),
-  createBashTool(workspaceDir),
-];
+// Persist state across --hot re-evaluations so we don't leak servers/connections.
+const hot = import.meta.hot;
 
-const guppy = Guppy.create({
-  projectDir: workspaceDir,
-  agent: {
-    model: models.kimiK25,
-    systemPrompt:
-      "You are a helpful coding assistant. You have access to tools for reading files and running bash commands. Be concise in your responses. All files you create should go in the ./data directory.",
-    tools,
-  },
-}).register(SseTransportLive);
+if (!hot?.data?.guppy) {
+  const workspaceDir = import.meta.dir;
+  const tools: AgentTool<any>[] = [
+    createReadTool(workspaceDir),
+    createWriteTool(workspaceDir),
+    createEditTool(workspaceDir),
+    createBashTool(workspaceDir),
+  ];
 
-await guppy.boot();
-const sse = new SseTransportAdapter(guppy);
-await createServer(workspaceDir, shell, { guppy, sse, router });
+  const guppy = Guppy.create({
+    projectDir: workspaceDir,
+    agent: {
+      model: models.kimiK25,
+      systemPrompt:
+        "You are a helpful coding assistant. You have access to tools for reading files and running bash commands. Be concise in your responses. All files you create should go in the ./data directory.",
+      tools,
+    },
+  }).register(SseTransportLive);
+
+  await guppy.boot();
+  const sse = new SseTransportAdapter(guppy);
+  const server = await createServer(workspaceDir, shell, { guppy, sse, router });
+
+  if (hot) {
+    hot.data.guppy = guppy;
+    hot.data.sse = sse;
+    hot.data.server = server;
+  }
+} else {
+  console.log("[hmr] start.ts re-evaluated — server state preserved");
+}
+
+hot?.accept();

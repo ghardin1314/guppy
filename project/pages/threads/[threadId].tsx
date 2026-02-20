@@ -1,7 +1,7 @@
-import { ThreadSidebar } from "@/components/thread-sidebar";
 import { ChatInput } from "@/components/chat-input";
 import { MessageList } from "@/components/message-list";
 import type { Messages, ToolResultMessage } from "@/components/message-types";
+import { ThreadSidebar } from "@/components/thread-sidebar";
 import { orpc } from "@/lib/rpc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -37,6 +37,7 @@ export default function ThreadPage() {
     queryKey: orpc.threads.events.experimental_streamedOptions({
       input: { threadId },
     }).queryKey,
+    retry: true,
     queryFn: async ({ signal }) => {
       const stream = await orpc.threads.events.call({ threadId });
       let currentMessageId: string | null = null;
@@ -65,9 +66,7 @@ export default function ThreadPage() {
         } else if (msg.event.type === "message_update") {
           const content = msg.event.message;
           qc.setQueryData(messagesQueryKey, (old: Messages = []) =>
-            old.map((m) =>
-              m.id === currentMessageId ? { ...m, content } : m,
-            ),
+            old.map((m) => (m.id === currentMessageId ? { ...m, content } : m)),
           );
         } else if (msg.event.type === "message_end") {
           currentMessageId = null;
@@ -116,13 +115,16 @@ export default function ThreadPage() {
     },
   });
 
-  if (isPending) return <div>Loading...</div>;
-  if (error) return <div>Error: {error.message}</div>;
+  if (isPending) return <div className="flex h-screen items-center justify-center">Loading thread...</div>;
+  if (error) return <div className="flex h-screen items-center justify-center text-red-500">Error: {error.message}</div>;
 
   return (
     <div className="flex h-screen">
       <ThreadSidebar activeThreadId={threadId} connected={true} />
       <div className="flex-1 flex flex-col">
+        <div className="bg-muted/50 p-2 text-center text-sm text-muted-foreground border-b">
+          Thread ID: {threadId}
+        </div>
         <MessageList messages={messages} toolResults={toolResults} />
         <ChatInput threadId={threadId} streaming={streaming} />
       </div>

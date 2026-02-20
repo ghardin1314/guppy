@@ -37,12 +37,25 @@ export async function generateRoutes(projectDir: string) {
     for (const { pattern, filePath } of routes) {
       const rel = "./" + relative(outDir, filePath);
       entries.push(
-        `  { path: "${pattern}", lazy: () => import("${rel}").then(m => ({ Component: m.default })) },`
+        `  { path: "${pattern}", lazy: () => retryImport(() => import("${rel}")).then(m => ({ Component: m.default })) },`
       );
     }
 
     const content = `// AUTO-GENERATED — do not edit.
 import type { RouteObject } from "react-router";
+
+async function retryImport<T>(load: () => Promise<T>, attempts = 3, delay = 500): Promise<T> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await load();
+    } catch (e) {
+      if (i === attempts - 1) throw e;
+      console.warn(\`[routes] import failed (attempt \${i + 1}/\${attempts}), retrying in \${delay}ms\`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error("unreachable");
+}
 
 export const routes: RouteObject[] = [
 ${entries.join("\n")}
