@@ -1,7 +1,8 @@
 import type { Command } from "commander";
 import { scaffold } from "create-guppy";
 import * as clack from "@clack/prompts";
-import { resolve, basename, dirname } from "path";
+import { resolve, basename, dirname, join } from "path";
+import { existsSync } from "fs";
 import { $ } from "bun";
 
 interface InitOpts {
@@ -26,9 +27,19 @@ function parseTgzFilename(output: string): string {
   return line.trim();
 }
 
+function findPackageDir(name: string): string {
+  const resolved = import.meta.resolve(name);
+  let dir = dirname(resolved.replace("file://", ""));
+  while (!existsSync(join(dir, "package.json"))) {
+    const parent = dirname(dir);
+    if (parent === dir) throw new Error(`Could not find package.json for ${name}`);
+    dir = parent;
+  }
+  return dir;
+}
+
 async function packLocalPkg(name: string): Promise<string> {
-  const pkgJson = require.resolve(`${name}/package.json`);
-  const pkgDir = dirname(pkgJson);
+  const pkgDir = findPackageDir(name);
   const result = await $`cd ${pkgDir} && bun pm pack`.text();
   return resolve(pkgDir, parseTgzFilename(result));
 }

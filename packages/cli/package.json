@@ -16,6 +16,7 @@
   "dependencies": {
     "@clack/prompts": "^0.9",
     "@guppy/core": "workspace:*",
+    "@guppy/transport-ws": "workspace:*",
     "@guppy/web": "workspace:*",
     "commander": "^13",
     "create-guppy": "workspace:*"
