@@ -1,4 +1,6 @@
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { Schema } from "effect";
+import { parseJson } from "effect/Schema";
 
 // -- Branded identifiers ------------------------------------------------------
 
@@ -28,15 +30,16 @@ export type Thread = Schema.Schema.Type<typeof Thread>;
 
 // -- Messages -----------------------------------------------------------------
 
-export const MessageRole = Schema.Literal("user", "assistant", "tool_result", "summary");
-export type MessageRole = Schema.Schema.Type<typeof MessageRole>;
+// TODO: actually build out the schema for AgentMessage
+export const MessageContent = parseJson(
+  Schema.declare((input: unknown): input is AgentMessage => true),
+).pipe(Schema.asSchema)
 
 export const Message = Schema.Struct({
   id: Schema.String,
   threadId: ThreadId,
   parentId: Schema.String.pipe(Schema.NullOr),
-  role: MessageRole,
-  content: Schema.String,
+  content: MessageContent,
   createdAt: Schema.Number,
 });
 export type Message = Schema.Schema.Type<typeof Message>;

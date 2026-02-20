@@ -3,10 +3,16 @@
  * Accepts plain strings at the boundary; branded IDs stay internal.
  */
 
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { Effect } from "effect";
 import type { Guppy } from "./guppy.ts";
 import { ThreadStore } from "./repository.ts";
-import type { Thread, Message, TransportId, ThreadId } from "./schema.ts";
+import {
+  Message,
+  Thread,
+  ThreadId,
+  TransportId,
+} from "./schema.ts";
 
 export interface ThreadStoreAdapter {
   getOrCreateThread(transport: string, threadId: string): Promise<Thread>;
@@ -15,8 +21,7 @@ export interface ThreadStoreAdapter {
   insertMessage(
     threadId: string,
     parentId: string | null,
-    role: "user" | "assistant" | "tool_result" | "summary",
-    content: string,
+    content: AgentMessage,
   ): Promise<Message>;
   getContext(threadId: string): Promise<ReadonlyArray<Message>>;
   countMessages(threadId: string): Promise<number>;
@@ -30,37 +35,38 @@ export function createThreadStoreAdapter(guppy: Guppy): ThreadStoreAdapter {
     getOrCreateThread: (transport, threadId) =>
       run(
         Effect.flatMap(ThreadStore, (s) =>
-          s.getOrCreateThread(transport as TransportId, threadId as ThreadId),
+          s.getOrCreateThread(
+            TransportId.make(transport),
+            ThreadId.make(threadId),
+          ),
         ),
       ),
     getThread: (threadId) =>
       run(
-        Effect.flatMap(ThreadStore, (s) =>
-          s.getThread(threadId as ThreadId),
-        ),
+        Effect.flatMap(ThreadStore, (s) => s.getThread(threadId as ThreadId)),
       ),
     listThreads: (transport) =>
       run(
         Effect.flatMap(ThreadStore, (s) =>
-          s.listThreads(transport as TransportId | undefined),
+          s.listThreads(transport ? TransportId.make(transport) : undefined),
         ),
       ),
-    insertMessage: (threadId, parentId, role, content) =>
+    insertMessage: (threadId, parentId, content) =>
       run(
         Effect.flatMap(ThreadStore, (s) =>
-          s.insertMessage(threadId as ThreadId, parentId, role, content),
+          s.insertMessage(ThreadId.make(threadId), parentId, content),
         ),
       ),
     getContext: (threadId) =>
       run(
         Effect.flatMap(ThreadStore, (s) =>
-          s.getContext(threadId as ThreadId),
+          s.getContext(ThreadId.make(threadId)),
         ),
       ),
     countMessages: (threadId) =>
       run(
         Effect.flatMap(ThreadStore, (s) =>
-          s.countMessages(threadId as ThreadId),
+          s.countMessages(ThreadId.make(threadId)),
         ),
       ),
   };

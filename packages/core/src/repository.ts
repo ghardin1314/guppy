@@ -2,10 +2,20 @@
  * Unified persistence service for threads, messages, and context retrieval.
  */
 
-import { Clock, Context, Effect, Layer } from "effect";
 import { SqlClient, SqlError } from "@effect/sql";
-import { type Thread, type Message, type TransportId, type ThreadId } from "./schema.ts";
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
+import type { ParseError } from "effect/ParseResult";
 import { nanoid } from "./id.ts";
+import {
+  Message,
+  MessageContent,
+  type Thread,
+  type ThreadId,
+  type TransportId,
+} from "./schema.ts";
+
+const decodeMessages = Schema.decodeUnknown(Schema.Array(Message));
 
 // -- Service interface --------------------------------------------------------
 
@@ -15,7 +25,9 @@ export interface ThreadStoreService {
     threadId: ThreadId,
   ) => Effect.Effect<Thread, SqlError.SqlError>;
 
-  readonly getThread: (threadId: ThreadId) => Effect.Effect<Thread | null, SqlError.SqlError>;
+  readonly getThread: (
+    threadId: ThreadId,
+  ) => Effect.Effect<Thread | null, SqlError.SqlError>;
 
   readonly listThreads: (
     transport?: TransportId,
@@ -24,14 +36,17 @@ export interface ThreadStoreService {
   readonly insertMessage: (
     threadId: ThreadId,
     parentId: string | null,
-    role: Message["role"],
-    content: string,
-  ) => Effect.Effect<Message, SqlError.SqlError>;
+    content: AgentMessage,
+  ) => Effect.Effect<Message, SqlError.SqlError | ParseError>;
 
   /** Walk the parent chain from leaf to root, returning messages oldest-first. */
-  readonly getContext: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>, SqlError.SqlError>;
+  readonly getContext: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<Message>, SqlError.SqlError | ParseError>;
 
-  readonly countMessages: (threadId: ThreadId) => Effect.Effect<number, SqlError.SqlError>;
+  readonly countMessages: (
+    threadId: ThreadId,
+  ) => Effect.Effect<number, SqlError.SqlError>;
 }
 
 // -- Tag ----------------------------------------------------------------------
@@ -88,23 +103,22 @@ export const ThreadStoreLive = Layer.effect(
               SELECT * FROM _guppy_threads ORDER BY last_active_at DESC
             `,
 
-      insertMessage: (threadId, parentId, role, content) =>
+      insertMessage: (threadId, parentId, content) =>
         Effect.gen(function* () {
           const id = yield* nanoid();
           const ts = yield* Clock.currentTimeMillis;
+          const role = content.role;
+          const encoded = yield* Schema.encode(MessageContent)(content);
           yield* sql`
             INSERT INTO _guppy_messages (id, thread_id, parent_id, role, content, created_at)
-            VALUES (${id}, ${threadId}, ${parentId}, ${role}, ${content}, ${ts})
+            VALUES (${id}, ${threadId}, ${parentId}, ${role}, ${encoded}, ${ts})
           `;
           yield* sql`
             UPDATE _guppy_threads
             SET leaf_id = ${id}, last_active_at = ${ts}
             WHERE thread_id = ${threadId}
           `;
-          const rows = yield* sql<Message>`
-            SELECT * FROM _guppy_messages WHERE id = ${id}
-          `;
-          return rows[0]!;
+          return { id, threadId, parentId, content, createdAt: ts };
         }),
 
       getContext: (threadId) =>
@@ -115,7 +129,7 @@ export const ThreadStoreLive = Layer.effect(
           const leafId = thread[0]?.leafId;
           if (!leafId) return [];
 
-          const messages = yield* sql<Message>`
+          const rows = yield* sql`
             WITH RECURSIVE chain AS (
               SELECT m.*, 0 AS depth FROM _guppy_messages m
               WHERE m.id = ${leafId}
@@ -125,7 +139,7 @@ export const ThreadStoreLive = Layer.effect(
             )
             SELECT * FROM chain ORDER BY depth DESC
           `;
-          return messages;
+          return yield* decodeMessages(rows);
         }),
 
       countMessages: (threadId) =>

@@ -138,8 +138,8 @@ it.layer(TestLayer)("orchestrator", (it) => {
       const thread = yield* store.getOrCreateThread(TEST, tid("chan-5"));
       const ctx = yield* store.getContext(thread.threadId);
       expect(ctx.length).toBeGreaterThanOrEqual(2);
-      expect(ctx[0]!.role).toBe("user");
-      expect(ctx[1]!.role).toBe("assistant");
+      expect(ctx[0]!.content.role).toBe("user");
+      expect(ctx[1]!.content.role).toBe("assistant");
     }),
   );
 

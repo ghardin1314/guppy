@@ -51,11 +51,12 @@ it.layer(TestLayer)("agent-thread", (it) => {
 
         const ctx = yield* store.getContext(threadId);
         expect(ctx.length).toBeGreaterThanOrEqual(2);
-        expect(ctx[0]!.role).toBe("user");
-        expect(JSON.parse(ctx[0]!.content)).toEqual([
-          { type: "text", text: "persist me" },
-        ]);
-        expect(ctx[1]!.role).toBe("assistant");
+        expect(ctx[0]!.content.role).toBe("user");
+        expect(ctx[0]!.content).toMatchObject({
+          role: "user",
+          content: [{ type: "text", text: "persist me" }],
+        });
+        expect(ctx[1]!.content.role).toBe("assistant");
       }),
     ),
   );
@@ -77,10 +78,10 @@ it.layer(TestLayer)("agent-thread", (it) => {
 
         const ctx = yield* store.getContext(threadId);
         expect(ctx.length).toBeGreaterThanOrEqual(4);
-        expect(ctx[0]!.role).toBe("user");
-        expect(ctx[1]!.role).toBe("assistant");
-        expect(ctx[2]!.role).toBe("user");
-        expect(ctx[3]!.role).toBe("assistant");
+        expect(ctx[0]!.content.role).toBe("user");
+        expect(ctx[1]!.content.role).toBe("assistant");
+        expect(ctx[2]!.content.role).toBe("user");
+        expect(ctx[3]!.content.role).toBe("assistant");
       }),
     ),
   );
@@ -111,12 +112,14 @@ it.layer(TestLayer)("agent-thread", (it) => {
 
         const ctx = yield* store.getContext(threadId);
         expect(ctx.length).toBeGreaterThanOrEqual(4);
-        expect(JSON.parse(ctx[0]!.content)).toEqual([
-          { type: "text", text: "msg1" },
-        ]);
-        expect(JSON.parse(ctx[2]!.content)).toEqual([
-          { type: "text", text: "msg2" },
-        ]);
+        expect(ctx[0]!.content).toMatchObject({
+          role: "user",
+          content: [{ type: "text", text: "msg1" }],
+        });
+        expect(ctx[2]!.content).toMatchObject({
+          role: "user",
+          content: [{ type: "text", text: "msg2" }],
+        });
       }),
     ),
   );
@@ -238,14 +241,16 @@ it.layer(InstrumentedTestLayer)("agent-thread (instrumented)", (it) => {
       const m1 = yield* store.insertMessage(
         tid,
         null,
-        "user",
-        JSON.stringify([{ type: "text", text: "old question" }]),
+        {
+          role: "user",
+          content: [{ type: "text", text: "old question" }],
+          timestamp: Date.now(),
+        },
       );
       yield* store.insertMessage(
         tid,
         m1.id,
-        "assistant",
-        JSON.stringify({
+        {
           role: "assistant",
           content: [{ type: "text", text: "old answer" }],
           api: "anthropic-messages",
@@ -267,7 +272,7 @@ it.layer(InstrumentedTestLayer)("agent-thread (instrumented)", (it) => {
           },
           stopReason: "stop",
           timestamp: Date.now(),
-        }),
+        },
       );
 
       const beforeCreate = instrumentedState.createConfigs.length;
@@ -290,10 +295,10 @@ it.layer(InstrumentedTestLayer)("agent-thread (instrumented)", (it) => {
 
       const ctx = yield* store.getContext(tid);
       expect(ctx.length).toBeGreaterThanOrEqual(4);
-      expect(ctx[0]!.role).toBe("user");
-      expect(ctx[1]!.role).toBe("assistant");
-      expect(ctx[2]!.role).toBe("user");
-      expect(ctx[3]!.role).toBe("assistant");
+      expect(ctx[0]!.content.role).toBe("user");
+      expect(ctx[1]!.content.role).toBe("assistant");
+      expect(ctx[2]!.content.role).toBe("user");
+      expect(ctx[3]!.content.role).toBe("assistant");
 
       yield* Scope.close(scope, Exit.void);
     }),

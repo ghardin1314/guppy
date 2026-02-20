@@ -21,14 +21,15 @@
  */
 
 import type { SqlError } from "@effect/sql";
-import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import type { ParseError } from "effect/ParseResult";
+import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import type { TSchema } from "@mariozechner/pi-ai";
 import { Chunk, Effect, Mailbox, Scope, Stream } from "effect";
 import { AgentError, AgentFactory, type CreateAgentConfig } from "./agent.ts";
 import { ThreadStore } from "./repository.ts";
 import { TransportService } from "./transport.ts";
 import { ThreadMessage } from "./thread-message.ts";
-import type { Message, ThreadId } from "./schema.ts";
+import type { ThreadId } from "./schema.ts";
 
 // -- Config -------------------------------------------------------------------
 
@@ -49,42 +50,6 @@ export interface AgentThreadHandle {
   readonly events: Stream.Stream<AgentEvent>;
 }
 
-// -- Message conversion -------------------------------------------------------
-
-/** Convert guppy Message rows → AgentMessage[] for rehydration. */
-function rowsToAgentMessages(rows: ReadonlyArray<Message>): AgentMessage[] {
-  return rows.map((row) => {
-    const content = JSON.parse(row.content);
-    switch (row.role) {
-      case "assistant":
-      case "tool_result":
-        return content; // stored as full message objects
-      case "user":
-      case "summary":
-      default:
-        return { role: "user" as const, content, timestamp: row.createdAt };
-    }
-  });
-}
-
-// TODO: replace cast with proper type guard — tightly coupled to Pi's Message shape
-/** Convert an AgentMessage → { role, content } for SQLite storage. */
-function agentMessageToRow(msg: AgentMessage): {
-  role: Message["role"];
-  content: string;
-} {
-  const m = msg as import("@mariozechner/pi-ai").Message;
-  switch (m.role) {
-    case "assistant":
-      return { role: "assistant", content: JSON.stringify(m) };
-    case "toolResult":
-      return { role: "tool_result", content: JSON.stringify(m) };
-    case "user":
-    default:
-      return { role: "user", content: JSON.stringify(m.content) };
-  }
-}
-
 // -- Spawn --------------------------------------------------------------------
 
 /**
@@ -98,7 +63,7 @@ export const spawn = (
   threadId: ThreadId,
 ): Effect.Effect<
   AgentThreadHandle,
-  SqlError.SqlError | AgentError,
+  SqlError.SqlError | ParseError | AgentError,
   AgentFactory | ThreadStore | TransportService | Scope.Scope
 > =>
   Effect.gen(function* () {
@@ -110,7 +75,7 @@ export const spawn = (
     // -- Rehydrate: load context, create agent handle ---------------------------
 
     const context = yield* store.getContext(threadId);
-    const history = rowsToAgentMessages(context);
+    const history = context.map((m) => m.content);
 
     const agent = yield* factory.create({
       systemPrompt: config.systemPrompt,
@@ -131,10 +96,9 @@ export const spawn = (
           const newMessages = allMessages.slice(persistedCount);
           if (newMessages.length === 0) return;
           for (const msg of newMessages) {
-            const { role, content } = agentMessageToRow(msg);
             const thread = yield* store.getThread(threadId);
             const parentId = thread?.leafId ?? null;
-            yield* store.insertMessage(threadId, parentId, role, content);
+            yield* store.insertMessage(threadId, parentId, msg);
           }
           persistedCount = allMessages.length;
         }),

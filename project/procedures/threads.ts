@@ -1,7 +1,7 @@
 import { procedure } from "../lib/procedures";
 import { z } from "zod";
 import { eventIterator, EventPublisher } from "@orpc/server";
-import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentEvent, AgentMessage } from "@guppy/core";
 
 const AgentEventPayload = z.object({
   type: z.literal("agent_event"),
@@ -22,8 +22,7 @@ const MessageOutput = z.object({
   id: z.string(),
   threadId: z.string(),
   parentId: z.string().nullable(),
-  role: z.string(),
-  content: z.string(),
+  content: z.custom<AgentMessage>(),
   createdAt: z.number(),
 });
 

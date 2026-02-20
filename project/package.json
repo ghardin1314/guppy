@@ -9,8 +9,6 @@
     "@guppy/core": "workspace:*",
     "@guppy/transport-sse": "workspace:*",
     "@guppy/web": "workspace:*",
-    "@mariozechner/pi-agent-core": "^0.53.0",
-    "@mariozechner/pi-ai": "^0.53.0",
     "@orpc/client": "^1.13.5",
     "@orpc/server": "^1.13.5",
     "@orpc/tanstack-query": "^1.13.5",

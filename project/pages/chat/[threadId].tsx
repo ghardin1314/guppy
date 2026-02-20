@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@guppy/core";
 import { orpc, client } from "../../lib/rpc";
 import { ThreadSidebar } from "../../components/thread-sidebar";
 
@@ -26,23 +26,6 @@ function extractText(msg: AgentMessage): string {
     .filter((c): c is { type: "text"; text: string } => c.type === "text")
     .map((c) => c.text)
     .join("");
-}
-
-/** Parse DB content field — may be JSON content blocks or plain string */
-function renderContent(content: string): string {
-  try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .filter((b: any) => b.type === "text" && b.text)
-        .map((b: any) => b.text)
-        .join("");
-    }
-    if (typeof parsed === "string") return parsed;
-    return content;
-  } catch {
-    return content;
-  }
 }
 
 /** Derive ephemeral live state from SSE events */
@@ -155,8 +138,7 @@ export default function ChatThreadPage() {
         id: "optimistic-" + Date.now(),
         threadId,
         parentId: null,
-        role: "user",
-        content,
+        content: { role: "user" as const, content, timestamp: Date.now() },
         createdAt: Date.now(),
       },
     ]);
@@ -187,17 +169,17 @@ export default function ChatThreadPage() {
           {dbMessages.map((msg) => (
             <div
               key={msg.id}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              className={`flex ${msg.content.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
                 className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
-                  msg.role === "user"
+                  msg.content.role === "user"
                     ? "bg-blue-600 text-white"
                     : "bg-zinc-800 text-zinc-200"
                 }`}
               >
                 <pre className="whitespace-pre-wrap font-[inherit]">
-                  {renderContent(msg.content)}
+                  {extractText(msg.content as AgentMessage)}
                 </pre>
               </div>
             </div>

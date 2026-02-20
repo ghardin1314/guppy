@@ -18,6 +18,7 @@ import {
   Scope,
   Stream,
 } from "effect";
+import type { ParseError } from "effect/ParseResult";
 import {
   spawn,
   type AgentThreadConfig,
@@ -46,6 +47,7 @@ export class OrchestratorError extends Schema.TaggedError<OrchestratorError>()(
 
 export type OrchestratorSendError =
   | OrchestratorError
+  | ParseError
   | AgentError
   | TransportNotFoundError;
 
@@ -94,7 +96,7 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
           transport: TransportId,
         ): Effect.Effect<
           AgentThreadHandle,
-          OrchestratorError | AgentError | TransportNotFoundError
+          OrchestratorError | ParseError | AgentError | TransportNotFoundError
         > =>
           Effect.gen(function* () {
             const map = yield* Ref.get(threads);
