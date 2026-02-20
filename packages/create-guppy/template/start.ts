@@ -1,4 +1,5 @@
 import { Guppy, getModel } from "@guppy/core";
+import { WebsocketTransportLive, WsTransportAdapter } from "@guppy/transport-ws";
 import { createServer } from "@guppy/web";
 
 // shell.html must be a static import so Bun's bundler processes it.
@@ -10,7 +11,8 @@ const guppy = Guppy.create({
     model: getModel("anthropic", "claude-sonnet-4-20250514"),
     systemPrompt: "You are a helpful assistant.",
   },
-});
+}).register({ layer: WebsocketTransportLive });
 
 await guppy.boot();
-await createServer(import.meta.dir, shell, { guppy });
+const ws = new WsTransportAdapter(guppy);
+await createServer(import.meta.dir, shell, { guppy, ws });

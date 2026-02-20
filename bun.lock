@@ -52,6 +52,28 @@
         "typescript": "^5",
       },
     },
+    "apps/test-chat": {
+      "name": "test-chat",
+      "dependencies": {
+        "@guppy/core": "workspace:*",
+        "@guppy/transport-ws": "workspace:*",
+        "@guppy/web": "workspace:*",
+        "@mariozechner/pi-agent-core": "^0.53.0",
+        "@mariozechner/pi-ai": "^0.53.0",
+        "@sinclair/typebox": "^0.34.48",
+        "react": "^19",
+        "react-dom": "^19",
+        "react-router": "^7",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "bun-plugin-tailwind": "^0.1",
+        "bun-types": "latest",
+        "tailwindcss": "^4",
+      },
+    },
     "apps/web-prototype": {
       "name": "web-prototype",
       "dependencies": {
@@ -105,7 +127,16 @@
       "version": "0.0.0",
       "dependencies": {
         "@guppy/core": "workspace:*",
+        "@guppy/transport-ws": "workspace:*",
         "@guppy/web": "workspace:*",
+      },
+    },
+    "packages/transport-ws": {
+      "name": "@guppy/transport-ws",
+      "version": "0.0.0",
+      "dependencies": {
+        "@guppy/core": "workspace:*",
+        "effect": "^3.19.18",
       },
     },
     "packages/web": {
@@ -113,6 +144,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@guppy/core": "workspace:*",
+        "@guppy/transport-ws": "workspace:*",
       },
     },
   },
@@ -272,6 +304,8 @@
     "@guppy/cli": ["@guppy/cli@workspace:packages/cli"],
 
     "@guppy/core": ["@guppy/core@workspace:packages/core"],
+
+    "@guppy/transport-ws": ["@guppy/transport-ws@workspace:packages/transport-ws"],
 
     "@guppy/web": ["@guppy/web@workspace:packages/web"],
 
@@ -890,6 +924,8 @@
     "tailwindcss": ["tailwindcss@4.2.0", "", {}, "sha512-yYzTZ4++b7fNYxFfpnberEEKu43w44aqDMNM9MHMmcKuCH7lL8jJ4yJ7LGHv7rSwiqM0nkiobF9I6cLlpS2P7Q=="],
 
     "tapable": ["tapable@2.3.0", "", {}, "sha512-g9ljZiwki/LfxmQADO3dEY1CbpmXT5Hm2fJ+QaGKwSXUylMybePR7/67YW7jOrrvjEgL1Fmz5kzyAjWVWLlucg=="],
+
+    "test-chat": ["test-chat@workspace:apps/test-chat"],
 
     "tinybench": ["tinybench@2.9.0", "", {}, "sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg=="],
 

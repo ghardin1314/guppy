@@ -1,17 +1,21 @@
 import { expect } from "bun:test";
 import { Effect, Layer } from "effect";
-import { makeDbLayer } from "./db.ts";
-import { ThreadStoreLive } from "./repository.ts";
-import { Orchestrator } from "./orchestrator.ts";
-import { TransportRegistryLive } from "./transport-registry.ts";
-import { TransportMap } from "./transport-map.ts";
+import {
+  makeDbLayer,
+  ThreadStoreLive,
+  Orchestrator,
+  TransportRegistryLive,
+  TransportMap,
+  EchoAgentFactoryLive,
+  testConfig,
+  ThreadId,
+} from "@guppy/core";
 import {
   WebsocketTransport,
   WebsocketTransportLive,
   type ServerMessage,
 } from "./ws-transport.ts";
-import { it, EchoAgentFactoryLive, testConfig } from "./testing.ts";
-import { ThreadId } from "./schema.ts";
+import { it } from "@guppy/core";
 
 const tid = ThreadId.make;
 

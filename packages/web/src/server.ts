@@ -1,5 +1,6 @@
 import type { Guppy } from "@guppy/core";
-import type { HTMLBundle, ServerWebSocket } from "bun";
+import type { WsTransportAdapter } from "@guppy/transport-ws";
+import type { HTMLBundle } from "bun";
 import { watch } from "fs/promises";
 import { generateRoutes } from "./generate-routes.ts";
 
@@ -16,7 +17,7 @@ interface WsData {
 export async function createServer(
   projectDir: string,
   shell: HTMLBundle,
-  options: { guppy: Guppy; port?: number }
+  options: { guppy: Guppy; ws: WsTransportAdapter; port?: number },
 ) {
   await generateRoutes(projectDir);
 
@@ -25,14 +26,18 @@ export async function createServer(
     dir: `${projectDir}/routes`,
   });
 
-  const { guppy } = options;
+  const { guppy, ws } = options;
 
   // Watch pages/ → regenerate route manifest (new routes only)
   // Bun's built-in HMR handles pushing client updates for existing pages
   async function watchPages() {
-    for await (const event of watch(`${projectDir}/pages`, { recursive: true })) {
+    for await (const event of watch(`${projectDir}/pages`, {
+      recursive: true,
+    })) {
       if (event.filename?.includes(".tmp.")) continue;
-      console.log(`[watch] pages changed: ${event.eventType} ${event.filename ?? ""}`);
+      console.log(
+        `[watch] pages changed: ${event.eventType} ${event.filename ?? ""}`,
+      );
       await generateRoutes(projectDir);
     }
   }
@@ -40,8 +45,12 @@ export async function createServer(
 
   // Watch routes/ → reload API router
   async function watchRoutes() {
-    for await (const event of watch(`${projectDir}/routes`, { recursive: true })) {
-      console.log(`[watch] routes changed: ${event.eventType} ${event.filename ?? ""}`);
+    for await (const event of watch(`${projectDir}/routes`, {
+      recursive: true,
+    })) {
+      console.log(
+        `[watch] routes changed: ${event.eventType} ${event.filename ?? ""}`,
+      );
       apiRouter.reload();
     }
   }
@@ -56,10 +65,15 @@ export async function createServer(
     const mod = await import(match.filePath);
     const handler = mod[req.method] ?? mod.default;
     if (!handler) return new Response("Method not allowed", { status: 405 });
-    return handler(req, { params: match.params, query: match.query, guppy } satisfies RouteContext);
+    return handler(req, {
+      params: match.params,
+      query: match.query,
+      guppy,
+    } satisfies RouteContext);
   }
 
-  const port = options.port ?? (process.env.PORT ? Number(process.env.PORT) : 3456);
+  const port =
+    options.port ?? (process.env.PORT ? Number(process.env.PORT) : 3456);
 
   const server = Bun.serve<WsData>({
     port,
@@ -70,19 +84,19 @@ export async function createServer(
     },
 
     websocket: {
-      async open(ws) {
-        const { channelId } = ws.data;
-        await guppy.ws.connect(channelId, ws);
+      async open(socket) {
+        const { channelId } = socket.data;
+        await ws.connect(channelId, socket);
         console.log(`[ws] channel ${channelId} connected`);
       },
 
-      async message(ws, raw) {
-        await guppy.ws.handleMessage(ws.data.channelId, String(raw));
+      async message(socket, raw) {
+        await ws.handleMessage(socket.data.channelId, String(raw));
       },
 
-      async close(ws) {
-        const { channelId } = ws.data;
-        await guppy.ws.disconnect(channelId);
+      async close(socket) {
+        const { channelId } = socket.data;
+        await ws.disconnect(channelId);
         console.log(`[ws] channel ${channelId} disconnected`);
       },
     },

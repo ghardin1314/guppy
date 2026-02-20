@@ -22,6 +22,7 @@ export * from "./schema.ts";
 export {
   collectUntilEnd,
   EchoAgentFactoryLive,
+  it,
   makeInstrumentedAgentFactory,
   makeRegisteredTestTransport,
   makeTestTransport,
@@ -39,9 +40,3 @@ export {
 export type { TransportRegistryService } from "./transport-registry.ts";
 export { TransportService } from "./transport.ts";
 export type { Transport } from "./transport.ts";
-export { WebsocketTransport, WebsocketTransportLive } from "./ws-transport.ts";
-export type {
-  ClientMessage,
-  ServerMessage,
-  WebsocketTransportService,
-} from "./ws-transport.ts";

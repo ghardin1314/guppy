@@ -12,6 +12,7 @@
   "files": ["src", "template"],
   "dependencies": {
     "@guppy/core": "workspace:*",
+    "@guppy/transport-ws": "workspace:*",
     "@guppy/web": "workspace:*"
   }
 }

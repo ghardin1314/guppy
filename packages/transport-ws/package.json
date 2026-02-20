@@ -1,16 +1,18 @@
 {
-  "name": "@guppy/web",
+  "name": "@guppy/transport-ws",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": ["src"],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@guppy/core": "workspace:*",
-    "@guppy/transport-ws": "workspace:*"
-  },
-  "files": ["src"]
+    "effect": "^3.19.18"
+  }
 }

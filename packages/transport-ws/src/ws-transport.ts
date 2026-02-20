@@ -12,10 +12,10 @@
  */
 
 import { Context, Effect, Fiber, flow, HashMap, HashSet, Layer, PubSub, Queue, Ref, Schema } from "effect";
-import { Orchestrator, type OrchestratorSendError } from "./orchestrator.ts";
-import { ThreadMessage } from "./thread-message.ts";
-import { TransportRegistry } from "./transport-registry.ts";
-import { ThreadId, TransportId } from "./schema.ts";
+import { Orchestrator, type OrchestratorSendError } from "@guppy/core";
+import { ThreadMessage } from "@guppy/core";
+import { TransportRegistry } from "@guppy/core";
+import { ThreadId, TransportId } from "@guppy/core";
 
 // -- WS protocol schemas ------------------------------------------------------
 
@@ -140,7 +140,7 @@ export interface WebsocketTransportService {
 // -- Tag ----------------------------------------------------------------------
 
 export class WebsocketTransport extends Context.Tag(
-  "@guppy/core/WebsocketTransport",
+  "@guppy/transport-ws/WebsocketTransport",
 )<WebsocketTransport, WebsocketTransportService>() {}
 
 // -- Live implementation ------------------------------------------------------

@@ -20,9 +20,10 @@ export async function scaffold(targetDir: string, options?: ScaffoldOptions) {
   // Copy template/ → targetDir recursively
   await cp(templateDir, targetDir, { recursive: true });
 
-  const [webVersion, coreVersion] = await Promise.all([
+  const [webVersion, coreVersion, transportWsVersion] = await Promise.all([
     getPkgVersion("@guppy/web"),
     getPkgVersion("@guppy/core"),
+    getPkgVersion("@guppy/transport-ws"),
   ]);
 
   // Build package.json dynamically
@@ -35,6 +36,7 @@ export async function scaffold(targetDir: string, options?: ScaffoldOptions) {
     },
     dependencies: {
       "@guppy/core": `^${coreVersion}`,
+      "@guppy/transport-ws": `^${transportWsVersion}`,
       "@guppy/web": `^${webVersion}`,
       react: "^19",
       "react-dom": "^19",
