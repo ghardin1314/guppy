@@ -79,14 +79,16 @@ export async function runInit(dir?: string, opts?: InitOpts) {
   let packageOverrides: Record<string, string> | undefined;
   if (opts?.local) {
     s.start("Packing local packages...");
-    const [coreTarball, webTarball] = await Promise.all([
+    const [coreTarball, webTarball, transportWsTarball] = await Promise.all([
       packLocalPkg("@guppy/core"),
       packLocalPkg("@guppy/web"),
+      packLocalPkg("@guppy/transport-ws"),
     ]);
-    s.stop(`Packed ${basename(coreTarball)}, ${basename(webTarball)}`);
+    s.stop(`Packed ${basename(coreTarball)}, ${basename(webTarball)}, ${basename(transportWsTarball)}`);
     packageOverrides = {
       "@guppy/core": `file:${coreTarball}`,
       "@guppy/web": `file:${webTarball}`,
+      "@guppy/transport-ws": `file:${transportWsTarball}`,
     };
   }
 

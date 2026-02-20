@@ -51,8 +51,12 @@ describe("scaffold", () => {
       expect(fileSet.has("tsconfig.json")).toBe(true);
       expect(fileSet.has(".gitignore")).toBe(true);
       expect(fileSet.has(join("pages", "index.tsx"))).toBe(true);
+      expect(fileSet.has(join("pages", "chat.tsx"))).toBe(true);
       expect(fileSet.has(join("routes", "health.ts"))).toBe(true);
       expect(fileSet.has(join("styles", "global.css"))).toBe(true);
+      expect(fileSet.has(join("tools", "read.ts"))).toBe(true);
+      expect(fileSet.has(join("tools", "bash.ts"))).toBe(true);
+      expect(fileSet.has(join("tools", "shared.ts"))).toBe(true);
 
       // Dynamically generated
       expect(fileSet.has("package.json")).toBe(true);
@@ -247,7 +251,7 @@ describe("scaffold", () => {
           (m as { type: string }).type === "agent_event",
       );
       expect(agentEvents.length).toBeGreaterThanOrEqual(1);
-      expect(agentEvents[0].threadId).toBe("test-thread");
+      expect(agentEvents[0]!.threadId).toBe("test-thread");
 
       ws.close();
     } finally {

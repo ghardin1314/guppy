@@ -1,0 +1,27 @@
+{
+  "name": "guppy-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot start.ts"
+  },
+  "dependencies": {
+    "@guppy/core": "workspace:*",
+    "@guppy/transport-ws": "workspace:*",
+    "@guppy/web": "workspace:*",
+    "@mariozechner/pi-agent-core": "^0.53.0",
+    "@mariozechner/pi-ai": "^0.53.0",
+    "@sinclair/typebox": "^0.34.48",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-router": "^7"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "bun-plugin-tailwind": "^0.1",
+    "bun-types": "latest",
+    "tailwindcss": "^4"
+  }
+}

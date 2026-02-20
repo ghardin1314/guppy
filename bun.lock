@@ -52,28 +52,6 @@
         "typescript": "^5",
       },
     },
-    "apps/test-chat": {
-      "name": "test-chat",
-      "dependencies": {
-        "@guppy/core": "workspace:*",
-        "@guppy/transport-ws": "workspace:*",
-        "@guppy/web": "workspace:*",
-        "@mariozechner/pi-agent-core": "^0.53.0",
-        "@mariozechner/pi-ai": "^0.53.0",
-        "@sinclair/typebox": "^0.34.48",
-        "react": "^19",
-        "react-dom": "^19",
-        "react-router": "^7",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "@types/react": "^19",
-        "@types/react-dom": "^19",
-        "bun-plugin-tailwind": "^0.1",
-        "bun-types": "latest",
-        "tailwindcss": "^4",
-      },
-    },
     "apps/web-prototype": {
       "name": "web-prototype",
       "dependencies": {
@@ -145,6 +123,28 @@
       "dependencies": {
         "@guppy/core": "workspace:*",
         "@guppy/transport-ws": "workspace:*",
+      },
+    },
+    "project": {
+      "name": "guppy-app",
+      "dependencies": {
+        "@guppy/core": "workspace:*",
+        "@guppy/transport-ws": "workspace:*",
+        "@guppy/web": "workspace:*",
+        "@mariozechner/pi-agent-core": "^0.53.0",
+        "@mariozechner/pi-ai": "^0.53.0",
+        "@sinclair/typebox": "^0.34.48",
+        "react": "^19",
+        "react-dom": "^19",
+        "react-router": "^7",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "bun-plugin-tailwind": "^0.1",
+        "bun-types": "latest",
+        "tailwindcss": "^4",
       },
     },
   },
@@ -747,6 +747,8 @@
 
     "gtoken": ["gtoken@8.0.0", "", { "dependencies": { "gaxios": "^7.0.0", "jws": "^4.0.0" } }, "sha512-+CqsMbHPiSTdtSO14O51eMNlrp9N79gmeqmXeouJOhfucAedHw9noVe/n5uJk3tbKE6a+6ZCQg3RPhVhHByAIw=="],
 
+    "guppy-app": ["guppy-app@workspace:project"],
+
     "http-proxy-agent": ["http-proxy-agent@7.0.2", "", { "dependencies": { "agent-base": "^7.1.0", "debug": "^4.3.4" } }, "sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig=="],
 
     "https-proxy-agent": ["https-proxy-agent@7.0.6", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "4" } }, "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw=="],
@@ -924,8 +926,6 @@
     "tailwindcss": ["tailwindcss@4.2.0", "", {}, "sha512-yYzTZ4++b7fNYxFfpnberEEKu43w44aqDMNM9MHMmcKuCH7lL8jJ4yJ7LGHv7rSwiqM0nkiobF9I6cLlpS2P7Q=="],
 
     "tapable": ["tapable@2.3.0", "", {}, "sha512-g9ljZiwki/LfxmQADO3dEY1CbpmXT5Hm2fJ+QaGKwSXUylMybePR7/67YW7jOrrvjEgL1Fmz5kzyAjWVWLlucg=="],
-
-    "test-chat": ["test-chat@workspace:apps/test-chat"],
 
     "tinybench": ["tinybench@2.9.0", "", {}, "sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg=="],
 
