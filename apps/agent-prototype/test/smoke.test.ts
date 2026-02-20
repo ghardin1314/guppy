@@ -6,10 +6,7 @@ import { openDatabase } from "../db/schema.ts";
 import { getOrCreateThread } from "../db/threads.ts";
 import { insertMessage, getContext } from "../db/messages.ts";
 import { convertToLlm } from "../agent/convert.ts";
-import { createReadTool } from "../tools/read.ts";
-import { createWriteTool } from "../tools/write.ts";
-import { createEditTool } from "../tools/edit.ts";
-import { createBashTool } from "../tools/bash.ts";
+import { createReadTool, createWriteTool, createEditTool, createBashTool } from "@guppy/core";
 import { resolve } from "node:path";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 

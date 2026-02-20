@@ -1,4 +1,5 @@
 export { getModel } from "@mariozechner/pi-ai";
+export type { AgentTool } from "@mariozechner/pi-agent-core";
 export { spawn } from "./agent-thread.ts";
 export type { AgentThreadConfig, AgentThreadHandle } from "./agent-thread.ts";
 export { AgentError, AgentFactory, PiAgentFactoryLive } from "./agent.ts";
@@ -40,3 +41,11 @@ export {
 export type { TransportRegistryService } from "./transport-registry.ts";
 export { TransportService } from "./transport.ts";
 export type { Transport } from "./transport.ts";
+export {
+  createBaseTools,
+  createBashTool,
+  createEditTool,
+  createReadTool,
+  createWriteTool,
+  resolveSafePath,
+} from "./tools/index.ts";

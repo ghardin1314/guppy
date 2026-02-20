@@ -54,9 +54,10 @@ describe("scaffold", () => {
       expect(fileSet.has(join("pages", "chat.tsx"))).toBe(true);
       expect(fileSet.has(join("routes", "health.ts"))).toBe(true);
       expect(fileSet.has(join("styles", "global.css"))).toBe(true);
-      expect(fileSet.has(join("tools", "read.ts"))).toBe(true);
-      expect(fileSet.has(join("tools", "bash.ts"))).toBe(true);
-      expect(fileSet.has(join("tools", "shared.ts"))).toBe(true);
+      // Tools now live in @guppy/core, not scaffolded locally
+      expect(fileSet.has(join("tools", "read.ts"))).toBe(false);
+      expect(fileSet.has(join("tools", "bash.ts"))).toBe(false);
+      expect(fileSet.has(join("tools", "shared.ts"))).toBe(false);
 
       // Dynamically generated
       expect(fileSet.has("package.json")).toBe(true);

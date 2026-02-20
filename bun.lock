@@ -16,6 +16,7 @@
     "apps/agent-prototype": {
       "name": "agent-prototype",
       "dependencies": {
+        "@guppy/core": "workspace:*",
         "@mariozechner/pi-agent-core": "^0.53.0",
         "@mariozechner/pi-ai": "^0.53.0",
         "@sinclair/typebox": "^0.34.0",

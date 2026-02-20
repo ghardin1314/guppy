@@ -96,7 +96,7 @@ describe("Guppy", () => {
       }),
     );
 
-    guppy = createTestGuppy().register({ layer: transportLayer });
+    guppy = createTestGuppy().register(transportLayer);
     await guppy.boot();
 
     expect(constructed).toBe(true);

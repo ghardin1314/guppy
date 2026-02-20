@@ -6,6 +6,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@guppy/core": "workspace:*",
     "@mariozechner/pi-ai": "^0.53.0",
     "@mariozechner/pi-agent-core": "^0.53.0",
     "@sinclair/typebox": "^0.34.0"

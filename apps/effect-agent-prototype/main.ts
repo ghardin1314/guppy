@@ -12,11 +12,10 @@ import {
   ThreadId,
   TransportMap,
   TransportRegistryLive,
+  createBaseTools,
   type AgentThreadConfig,
   type GuppyEvent,
-  type ThreadKey,
 } from "@guppy/core";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { getModel } from "@mariozechner/pi-ai";
 import { DateTime, Effect, Layer } from "effect";
 import { resolve } from "node:path";
@@ -25,10 +24,6 @@ import {
   TerminalTransport,
   TerminalTransportLive,
 } from "./terminal-transport.ts";
-import { createBashTool } from "./tools/bash.ts";
-import { createEditTool } from "./tools/edit.ts";
-import { createReadTool } from "./tools/read.ts";
-import { createWriteTool } from "./tools/write.ts";
 
 // -- Paths --------------------------------------------------------------------
 
@@ -40,12 +35,7 @@ const WORKSPACE_DIR = resolve(import.meta.dir, "workspace");
 const SYSTEM_PROMPT = `You are a helpful coding agent. You can read, write, and edit files, and run shell commands.
 All file paths are relative to the workspace directory.`;
 
-const tools: AgentTool<any>[] = [
-  createReadTool(WORKSPACE_DIR),
-  createWriteTool(WORKSPACE_DIR),
-  createEditTool(WORKSPACE_DIR),
-  createBashTool(WORKSPACE_DIR),
-];
+const tools = createBaseTools(WORKSPACE_DIR);
 
 const agentConfig: AgentThreadConfig = {
   model: getModel("anthropic", "claude-sonnet-4-5"),
@@ -165,7 +155,7 @@ const main = Effect.gen(function* () {
   console.log("Schedule: /schedule <dur> <msg>, /cron <5-fields> <msg>");
   console.log("         /schedules, /cancel <id>");
   console.log("Type mid-stream to steer. /stop to abort.\n");
-  console.log(`Thread: ${thread.threadKey.slice(0, 8)}...\n`);
+  console.log(`Thread: ${thread.threadId.slice(0, 8)}...\n`);
 
   let running = true;
   while (running) {
@@ -185,7 +175,7 @@ const main = Effect.gen(function* () {
         case "/new": {
           threadId = ThreadId.make(crypto.randomUUID().slice(0, 8));
           thread = yield* store.getOrCreateThread(TERMINAL, threadId);
-          console.log(`New thread: ${thread.threadKey.slice(0, 8)}...`);
+          console.log(`New thread: ${thread.threadId.slice(0, 8)}...`);
           break;
         }
 
@@ -196,10 +186,10 @@ const main = Effect.gen(function* () {
             break;
           }
           for (const t of threads) {
-            const count = yield* store.countMessages(t.threadKey);
-            const active = t.threadKey === thread.threadKey ? " ← current" : "";
+            const count = yield* store.countMessages(t.threadId);
+            const active = t.threadId === thread.threadId ? " ← current" : "";
             console.log(
-              `  ${t.threadKey.slice(0, 8)}  ${t.threadId}  ${count} msgs${active}`,
+              `  ${t.threadId.slice(0, 8)}  ${t.threadId}  ${count} msgs${active}`,
             );
           }
           break;
@@ -212,14 +202,14 @@ const main = Effect.gen(function* () {
             break;
           }
           const threads = yield* store.listThreads(TERMINAL);
-          const match = threads.find((t) => t.threadKey.startsWith(prefix));
+          const match = threads.find((t) => t.threadId.startsWith(prefix));
           if (!match) {
             console.log(`No thread matching '${prefix}'`);
             break;
           }
           thread = match;
           threadId = thread.threadId;
-          console.log(`Switched to thread: ${thread.threadKey.slice(0, 8)}...`);
+          console.log(`Switched to thread: ${thread.threadId.slice(0, 8)}...`);
           break;
         }
 

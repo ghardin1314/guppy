@@ -3,10 +3,7 @@ import { agentLoop } from "@mariozechner/pi-agent-core";
 import type { AgentMessage, AgentEvent, AgentContext, AgentLoopConfig } from "@mariozechner/pi-agent-core";
 import type { Model } from "@mariozechner/pi-ai";
 import { getModel, getEnvApiKey } from "@mariozechner/pi-ai";
-import { createReadTool } from "../tools/read.ts";
-import { createWriteTool } from "../tools/write.ts";
-import { createEditTool } from "../tools/edit.ts";
-import { createBashTool } from "../tools/bash.ts";
+import { createBaseTools } from "@guppy/core";
 import { getContext, insertMessage } from "../db/messages.ts";
 import { getThread, updateThreadLeaf } from "../db/threads.ts";
 import { rowsToAgentMessages, agentMessageToRow, convertToLlm } from "./convert.ts";
@@ -31,12 +28,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   const { db, threadId, userInput, workspaceDir, signal, onEvent } = opts;
 
   const model = opts.model ?? getModel("anthropic", "claude-sonnet-4-5");
-  const tools = [
-    createReadTool(workspaceDir),
-    createWriteTool(workspaceDir),
-    createEditTool(workspaceDir),
-    createBashTool(workspaceDir),
-  ];
+  const tools = createBaseTools(workspaceDir);
 
   // Load existing context from SQLite
   const thread = getThread(db, threadId);

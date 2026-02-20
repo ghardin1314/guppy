@@ -11,14 +11,15 @@ import type { AgentThreadConfig } from "./agent-thread.ts";
 import { AgentFactory, PiAgentFactoryLive } from "./agent.ts";
 import { makeDbLayer } from "./db.ts";
 import { EventBus, EventBusLive } from "./event-bus.ts";
-import type { EventBusService } from "./event-bus.ts";
 import { EventStore, EventStoreLive } from "./event-store.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { ThreadStore, ThreadStoreLive } from "./repository.ts";
-import type { GuppyEvent, EventSchedule, ScheduleTiming } from "./schema.ts";
-import { ThreadMessage } from "./thread-message.ts";
+import type { EventSchedule, GuppyEvent, ScheduleTiming } from "./schema.ts";
 import { TransportMap } from "./transport-map.ts";
-import { TransportRegistry, TransportRegistryLive } from "./transport-registry.ts";
+import {
+  TransportRegistry,
+  TransportRegistryLive,
+} from "./transport-registry.ts";
 
 // -- Config -------------------------------------------------------------------
 
@@ -100,7 +101,11 @@ export class Guppy<Extra = never> {
   }
 
   static create(config: GuppyConfig): Guppy {
-    return new Guppy(config, PiAgentFactoryLive, Layer.empty as Layer.Layer<never>);
+    return new Guppy(
+      config,
+      PiAgentFactoryLive,
+      Layer.empty as Layer.Layer<never>,
+    );
   }
 
   /** @internal — test-only: override the agent factory layer */
@@ -108,19 +113,21 @@ export class Guppy<Extra = never> {
     config: GuppyConfig,
     agentFactoryLayer: Layer.Layer<AgentFactory>,
   ): Guppy {
-    return new Guppy(config, agentFactoryLayer, Layer.empty as Layer.Layer<never>);
+    return new Guppy(
+      config,
+      agentFactoryLayer,
+      Layer.empty as Layer.Layer<never>,
+    );
   }
 
-  register<T>(registration: {
-    layer: Layer.Layer<T, unknown, CoreServices>;
-  }): Guppy<Extra | T> {
+  register<T>(layer: Layer.Layer<T, unknown, CoreServices>): Guppy<Extra | T> {
     const next = new Guppy<Extra | T>(
       this.config,
       this.agentFactoryLayer,
       // Merge existing accumulated with new layer
       Layer.mergeAll(
         this.accumulated as Layer.Layer<Extra, unknown, CoreServices>,
-        registration.layer as Layer.Layer<T, unknown, CoreServices>,
+        layer as Layer.Layer<T, unknown, CoreServices>,
       ) as Layer.Layer<Extra | T, unknown, CoreServices>,
     );
     return next;
@@ -160,7 +167,10 @@ export class Guppy<Extra = never> {
     );
   }
 
-  async schedule(event: GuppyEvent, timing: ScheduleTiming): Promise<EventSchedule> {
+  async schedule(
+    event: GuppyEvent,
+    timing: ScheduleTiming,
+  ): Promise<EventSchedule> {
     if (!this.runtime) throw new Error("Guppy not booted");
     return this.runtime.runPromise(
       Effect.gen(function* () {
@@ -171,9 +181,13 @@ export class Guppy<Extra = never> {
   }
 
   /** Access a core service from the runtime. For advanced/transport use. */
-  runEffect<A, E>(effect: Effect.Effect<A, E, CoreServices | Extra>): Promise<A> {
+  runEffect<A, E>(
+    effect: Effect.Effect<A, E, CoreServices | Extra>,
+  ): Promise<A> {
     if (!this.runtime) throw new Error("Guppy not booted");
-    return this.runtime.runPromise(effect as Effect.Effect<A, E, CoreServices | Extra>);
+    return this.runtime.runPromise(
+      effect as Effect.Effect<A, E, CoreServices | Extra>,
+    );
   }
 
   async shutdown(): Promise<void> {
