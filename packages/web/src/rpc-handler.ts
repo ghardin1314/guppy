@@ -1,4 +1,4 @@
-import type { Guppy } from "@guppy/core";
+import { type Guppy, createThreadStoreAdapter } from "@guppy/core";
 import type { SseTransportAdapter } from "@guppy/transport-sse";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { Router } from "@orpc/server";
@@ -18,6 +18,7 @@ export function createRpcHandlers(
 ) {
   const rpcHandler = new RPCHandler(router);
   const apiHandler = new OpenAPIHandler(router);
+  const store = createThreadStoreAdapter(guppy);
 
   async function handle(
     handler: RPCHandler<GuppyContext> | OpenAPIHandler<GuppyContext>,
@@ -26,7 +27,7 @@ export function createRpcHandlers(
   ): Promise<Response> {
     const { matched, response } = await handler.handle(req, {
       prefix,
-      context: { guppy, sse, headers: req.headers },
+      context: { guppy, sse, store, headers: req.headers },
     });
     if (matched) return response;
     return new Response("Not found", { status: 404 });

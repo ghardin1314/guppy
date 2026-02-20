@@ -200,18 +200,21 @@ describe("scaffold", () => {
       }
       expect(ready).toBe(true);
 
-      // Connect SSE to a test thread
+      // Connect to oRPC event iterator via SSE
       const threadId = "test-thread";
-      const response = await fetch(`${base}/events/${threadId}`);
+      const response = await fetch(`${base}/rpc/threads/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ json: { threadId } }),
+      });
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("text/event-stream");
+      expect(response.headers.get("content-type")).toStartWith("text/event-stream");
 
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
-      // Read until we get the "connected" event
-      const readUntil = async (eventType: string, timeoutMs: number) => {
+      const readUntil = async (pattern: string | RegExp, timeoutMs: number) => {
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
           const { value, done } = await Promise.race([
@@ -220,13 +223,14 @@ describe("scaffold", () => {
           ]);
           if (done) break;
           if (value) buffer += decoder.decode(value, { stream: true });
-          if (buffer.includes(`event: ${eventType}`)) return true;
+          if (typeof pattern === "string" ? buffer.includes(pattern) : pattern.test(buffer)) return true;
         }
         return false;
       };
 
-      const gotConnected = await readUntil("connected", 5_000);
-      expect(gotConnected).toBe(true);
+      // oRPC sends an initial SSE comment on connect
+      const gotInitial = await readUntil(":", 5_000);
+      expect(gotInitial).toBe(true);
 
       // Send a prompt via RPC
       await fetch(`${base}/rpc/threads/prompt`, {
@@ -235,9 +239,9 @@ describe("scaffold", () => {
         body: JSON.stringify({ json: { threadId, content: "hello" } }),
       });
 
-      // Wait for agent_event
-      const gotAgentEvent = await readUntil("agent_event", 10_000);
-      expect(gotAgentEvent).toBe(true);
+      // Wait for a message event with agent data
+      const gotMessage = await readUntil("event: message", 10_000);
+      expect(gotMessage).toBe(true);
 
       reader.cancel();
     } finally {

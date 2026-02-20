@@ -1,5 +1,13 @@
 import { procedure } from "../lib/procedures";
 import { z } from "zod";
+import { eventIterator, EventPublisher } from "@orpc/server";
+import type { AgentEvent } from "@mariozechner/pi-agent-core";
+
+const AgentEventPayload = z.object({
+  type: z.literal("agent_event"),
+  threadId: z.string(),
+  event: z.custom<AgentEvent>(),
+});
 
 const ThreadOutput = z.object({
   threadId: z.string(),
@@ -10,14 +18,21 @@ const ThreadOutput = z.object({
   metadata: z.string(),
 });
 
+const MessageOutput = z.object({
+  id: z.string(),
+  threadId: z.string(),
+  parentId: z.string().nullable(),
+  role: z.string(),
+  content: z.string(),
+  createdAt: z.number(),
+});
+
 export const list = procedure
   .route({ method: "GET", path: "/threads" })
   .output(z.array(ThreadOutput))
   .handler(async ({ context }) => {
-    const rows = await context.guppy.query<z.infer<typeof ThreadOutput>>(
-      "SELECT thread_id, transport, status, created_at, last_active_at, metadata FROM _guppy_threads ORDER BY last_active_at DESC",
-    );
-    return [...rows];
+    const threads = await context.store.listThreads();
+    return [...threads];
   });
 
 export const get = procedure
@@ -25,11 +40,16 @@ export const get = procedure
   .input(z.object({ threadId: z.string() }))
   .output(ThreadOutput.nullable())
   .handler(async ({ input, context }) => {
-    const rows = await context.guppy.query<z.infer<typeof ThreadOutput>>(
-      "SELECT thread_id, transport, status, created_at, last_active_at, metadata FROM _guppy_threads WHERE thread_id = ? LIMIT 1",
-      input.threadId,
-    );
-    return rows[0] ?? null;
+    return context.store.getThread(input.threadId);
+  });
+
+export const messages = procedure
+  .route({ method: "GET", path: "/threads/{threadId}/messages" })
+  .input(z.object({ threadId: z.string() }))
+  .output(z.array(MessageOutput))
+  .handler(async ({ input, context }) => {
+    const msgs = await context.store.getContext(input.threadId);
+    return [...msgs];
   });
 
 export const prompt = procedure
@@ -54,4 +74,24 @@ export const steer = procedure
   .handler(async ({ input, context }) => {
     await context.sse.steer(input.threadId, input.content);
     return { ok: true };
+  });
+
+export const events = procedure
+  .input(z.object({ threadId: z.string() }))
+  .output(eventIterator(AgentEventPayload))
+  .handler(async function* ({ input, context }) {
+    const publisher = new EventPublisher<{
+      agentEvent: z.infer<typeof AgentEventPayload>;
+    }>();
+
+    const sendFn = (data: string) => {
+      publisher.publish("agentEvent", JSON.parse(data));
+    };
+
+    await context.sse.addListener(input.threadId, sendFn);
+    try {
+      yield* publisher.subscribe("agentEvent");
+    } finally {
+      await context.sse.removeListener(input.threadId, sendFn);
+    }
   });

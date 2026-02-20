@@ -1,9 +1,9 @@
 import { health } from "./health";
-import { list, get, prompt, stop, steer } from "./threads";
+import { list, get, messages, prompt, stop, steer, events } from "./threads";
 
 export const router = {
   health,
-  threads: { list, get, prompt, stop, steer },
+  threads: { list, get, messages, prompt, stop, steer, events },
 };
 
 export type Router = typeof router;

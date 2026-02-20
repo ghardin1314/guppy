@@ -31,6 +31,8 @@ export {
   withThread,
 } from "./testing.ts";
 export type { InstrumentedAgentState, TestTransportState } from "./testing.ts";
+export { createThreadStoreAdapter } from "./thread-store-adapter.ts";
+export type { ThreadStoreAdapter } from "./thread-store-adapter.ts";
 export { ThreadMessage } from "./thread-message.ts";
 export { TransportMap } from "./transport-map.ts";
 export {

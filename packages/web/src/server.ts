@@ -37,46 +37,11 @@ export async function createServer(
 
   const server = Bun.serve({
     port,
-    idleTimeout: 255, // max value — keeps SSE streams alive
+    idleTimeout: 5, // short for testing — SSE heartbeat keeps connections alive
 
     routes: {
       "/rpc/*": handleRpc,
       "/api/*": handleApi,
-
-      "/events/:threadId": (req) => {
-        const threadId = req.params.threadId;
-        let sendFn: ((data: string) => void) | null = null;
-
-        const stream = new ReadableStream({
-          start(controller) {
-            const encoder = new TextEncoder();
-            sendFn = (data: string) => {
-              controller.enqueue(
-                encoder.encode(`event: agent_event\ndata: ${data}\n\n`),
-              );
-            };
-            sse.addListener(threadId, sendFn);
-
-            // Send initial connected event
-            controller.enqueue(
-              encoder.encode(`event: connected\ndata: {}\n\n`),
-            );
-          },
-          cancel() {
-            if (sendFn) {
-              sse.removeListener(threadId, sendFn);
-            }
-          },
-        });
-
-        return new Response(stream, {
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-          },
-        });
-      },
 
       "/*": shell,
     },
@@ -94,7 +59,6 @@ export async function createServer(
   Pages:   http://localhost:${server.port}/
   RPC:     http://localhost:${server.port}/rpc
   API:     http://localhost:${server.port}/api/health
-  SSE:     http://localhost:${server.port}/events/:threadId
 `);
 
   return server;

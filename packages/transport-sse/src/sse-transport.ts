@@ -11,6 +11,14 @@
  */
 
 import {
+  Orchestrator,
+  ThreadId,
+  ThreadMessage,
+  TransportId,
+  TransportRegistry,
+  type OrchestratorSendError,
+} from "@guppy/core";
+import {
   Context,
   Effect,
   Fiber,
@@ -23,10 +31,6 @@ import {
   Ref,
   Schema,
 } from "effect";
-import { Orchestrator, type OrchestratorSendError } from "@guppy/core";
-import { ThreadMessage } from "@guppy/core";
-import { TransportRegistry } from "@guppy/core";
-import { ThreadId, TransportId } from "@guppy/core";
 
 // -- SSE event encoding -------------------------------------------------------
 
@@ -54,6 +58,7 @@ type SendFn = (data: string) => void;
 interface ListenerState {
   readonly send: SendFn;
   readonly fiber: Fiber.RuntimeFiber<void, never>;
+  readonly heartbeatFiber: Fiber.RuntimeFiber<void, never>;
 }
 
 // -- Encoding helper ----------------------------------------------------------
@@ -141,7 +146,24 @@ export const SseTransportLive = Layer.scoped(
             );
           }).pipe(Effect.scoped, Effect.forkIn(scope));
 
-          const state: ListenerState = { send, fiber };
+          const heartbeatPayload = yield* Schema.encode(
+            Schema.parseJson(AgentEventMessage),
+          )({
+            type: "agent_event",
+            threadId,
+            event: { type: "heartbeat" },
+          }).pipe(Effect.catchAll(() => Effect.succeed("")));
+
+          const heartbeatFiber = yield* Effect.forever(
+            Effect.gen(function* () {
+              yield* Effect.sleep("3 seconds");
+              yield* Effect.try(() => send(heartbeatPayload)).pipe(
+                Effect.catchAll(() => Effect.void),
+              );
+            }),
+          ).pipe(Effect.forkIn(scope));
+
+          const state: ListenerState = { send, fiber, heartbeatFiber };
           yield* Ref.update(listenersRef, (m) => {
             const existing = HashMap.get(m, threadId);
             const set =
@@ -169,6 +191,7 @@ export const SseTransportLive = Layer.scoped(
           if (!found) return;
 
           yield* Fiber.interrupt(found.fiber);
+          yield* Fiber.interrupt(found.heartbeatFiber);
           const newSet = HashSet.remove(set.value, found);
           yield* Ref.update(listenersRef, (m) =>
             HashSet.size(newSet) === 0
