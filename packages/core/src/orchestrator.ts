@@ -1,8 +1,8 @@
 /**
  * Orchestrator: virtual actor manager for agent threads.
  *
- * Callers address threads by (transport, channelId). The orchestrator
- * resolves this to a thread, spawns it if needed, and routes messages.
+ * Callers address threads by (transport, threadId). The orchestrator
+ * resolves this to a thread row, spawns if needed, and routes messages.
  * No lifecycle management leaks to callers.
  */
 
@@ -28,6 +28,7 @@ import { ThreadStore } from "./repository.ts";
 import { ThreadMessage } from "./thread-message.ts";
 import { TransportMap } from "./transport-map.ts";
 import { TransportNotFoundError } from "./transport-registry.ts";
+import type { TransportId, ThreadId } from "./schema.ts";
 
 // -- Errors -------------------------------------------------------------------
 const OrchestratorErrorReason = Schema.Literal("STORAGE_ERROR");
@@ -49,18 +50,17 @@ export type OrchestratorSendError =
   | TransportNotFoundError;
 
 export interface OrchestratorService {
-  /** Send to a virtual agent thread addressed by (transport, channelId).
-   *  Creates thread if needed, spawns if not running. */
+  /** Send to a virtual agent thread. Creates thread if needed, spawns if not running. */
   readonly send: (
-    transport: string,
-    channelId: string,
+    transport: TransportId,
+    threadId: ThreadId,
     msg: ThreadMessage,
   ) => Effect.Effect<void, OrchestratorSendError>;
 
   /** Get event stream for a thread. Returns null if not currently spawned. */
   readonly events: (
-    transport: string,
-    channelId: string,
+    transport: TransportId,
+    threadId: ThreadId,
   ) => Effect.Effect<Stream.Stream<AgentEvent> | null, OrchestratorError>;
 }
 
@@ -86,12 +86,12 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
         const spawnCtx = yield* Effect.context<AgentFactory | ThreadStore>();
 
         const threads = yield* Ref.make(
-          HashMap.empty<string, AgentThreadHandle>(),
+          HashMap.empty<ThreadId, AgentThreadHandle>(),
         );
 
         const getOrSpawn = (
-          threadId: string,
-          transportName: string,
+          threadId: ThreadId,
+          transport: TransportId,
         ): Effect.Effect<
           AgentThreadHandle,
           OrchestratorError | AgentError | TransportNotFoundError
@@ -106,8 +106,8 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
               ExecutionStrategy.sequential,
             );
 
-            const handle = yield* spawn(threadId, config).pipe(
-              Effect.provide(transportMap.get(transportName)),
+            const handle = yield* spawn(config, threadId).pipe(
+              Effect.provide(transportMap.get(transport)),
               Effect.provide(spawnCtx),
               Effect.provideService(Scope.Scope, threadScope),
             );
@@ -127,13 +127,10 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
           );
 
         return Orchestrator.of({
-          send: (transport, channelId, msg) =>
+          send: (transport, threadId, msg) =>
             Effect.gen(function* () {
-              const thread = yield* store.getOrCreateThread(
-                transport,
-                channelId,
-              );
-              const handle = yield* getOrSpawn(thread.id, thread.transport);
+              yield* store.getOrCreateThread(transport, threadId);
+              const handle = yield* getOrSpawn(threadId, transport);
               yield* handle.send(msg);
             }).pipe(
               Effect.catchTag(
@@ -147,14 +144,11 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
               ),
             ),
 
-          events: (transport, channelId) =>
+          events: (transport, threadId) =>
             Effect.gen(function* () {
-              const thread = yield* store.getOrCreateThread(
-                transport,
-                channelId,
-              );
+              yield* store.getOrCreateThread(transport, threadId);
               const map = yield* Ref.get(threads);
-              const entry = HashMap.get(map, thread.id);
+              const entry = HashMap.get(map, threadId);
               if (entry._tag === "None") return null;
               return entry.value.events;
             }).pipe(

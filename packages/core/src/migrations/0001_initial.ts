@@ -6,22 +6,20 @@ export default Effect.gen(function* () {
 
   yield* sql.unsafe(`
     CREATE TABLE IF NOT EXISTS _guppy_threads (
-      id TEXT PRIMARY KEY,
+      thread_id TEXT PRIMARY KEY,
       transport TEXT NOT NULL DEFAULT 'cli',
-      channel_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'idle',
       created_at INTEGER NOT NULL,
       last_active_at INTEGER NOT NULL,
       leaf_id TEXT,
-      metadata TEXT DEFAULT '{}',
-      UNIQUE(transport, channel_id)
+      metadata TEXT DEFAULT '{}'
     )
   `);
 
   yield* sql.unsafe(`
     CREATE TABLE IF NOT EXISTS _guppy_messages (
       id TEXT PRIMARY KEY,
-      thread_id TEXT NOT NULL REFERENCES _guppy_threads(id),
+      thread_id TEXT NOT NULL REFERENCES _guppy_threads(thread_id),
       parent_id TEXT,
       role TEXT NOT NULL,
       content TEXT NOT NULL,

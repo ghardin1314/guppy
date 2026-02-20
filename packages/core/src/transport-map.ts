@@ -13,13 +13,14 @@ import {
   TransportRegistry,
   TransportRegistryLive,
 } from "./transport-registry.ts";
+import type { TransportId } from "./schema.ts";
 
 // -- Service ------------------------------------------------------------------
 
 export class TransportMap extends LayerMap.Service<TransportMap>()(
   "@guppy/core/TransportMap",
   {
-    lookup: (name: string) =>
+    lookup: (name: TransportId) =>
       Layer.effect(
         TransportService,
         Effect.gen(function* () {

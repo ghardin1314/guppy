@@ -7,6 +7,7 @@
 
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import { Context, Effect } from "effect";
+import type { ThreadId } from "./schema.ts";
 
 // -- Interface ----------------------------------------------------------------
 
@@ -14,13 +15,13 @@ export interface Transport {
   /** Called by the agent thread at the start of each turn.
    *  Returns channel-specific context: system prompt additions,
    *  recent channel messages, formatting instructions, etc. */
-  readonly getContext: (threadId: string) => Effect.Effect<string>;
+  readonly getContext: (threadId: ThreadId) => Effect.Effect<string>;
 
   /** Called by the agent thread for every AgentEvent.
    *  The transport decides what to do with each event type —
    *  Slack might post on agent_end only, web UI streams everything. */
   readonly deliver: (
-    threadId: string,
+    threadId: ThreadId,
     event: AgentEvent,
   ) => Effect.Effect<void>;
 }

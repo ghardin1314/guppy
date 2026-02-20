@@ -9,6 +9,8 @@ import {
   Orchestrator,
   TransportRegistry,
   ThreadMessage,
+  TransportId,
+  type ThreadId,
   type OrchestratorService,
   type Transport,
 } from "@guppy/core";
@@ -21,18 +23,18 @@ type SendError = Effect.Effect.Error<
 
 export interface TerminalTransportService {
   readonly prompt: (
-    channelId: string,
+    threadId: ThreadId,
     content: string,
   ) => Effect.Effect<void, SendError>;
   readonly steer: (
-    channelId: string,
+    threadId: ThreadId,
     content: string,
   ) => Effect.Effect<void, SendError>;
   readonly followUp: (
-    channelId: string,
+    threadId: ThreadId,
     content: string,
   ) => Effect.Effect<void, SendError>;
-  readonly stop: (channelId: string) => Effect.Effect<void, SendError>;
+  readonly stop: (threadId: ThreadId) => Effect.Effect<void, SendError>;
   /** Blocks until the next `agent_end` event is delivered. */
   readonly waitForAgentEnd: Effect.Effect<void>;
 }
@@ -121,26 +123,27 @@ export const TerminalTransportLive: Layer.Layer<
 
     const transport: Transport = {
       getContext: () => Effect.succeed(""),
-      deliver: (_threadId, event) => Effect.sync(() => renderEvent(event)),
+      deliver: (_, event) => Effect.sync(() => renderEvent(event)),
     };
 
-    yield* registry.register("terminal", transport);
+    const TERMINAL = TransportId.make("terminal");
+    yield* registry.register(TERMINAL, transport);
 
     // -- Send helper ----------------------------------------------------------
 
-    const send = (channelId: string, msg: ThreadMessage) =>
-      orchestrator.send("terminal", channelId, msg);
+    const send = (threadId: ThreadId, msg: ThreadMessage) =>
+      orchestrator.send(TERMINAL, threadId, msg);
 
     // -- Service --------------------------------------------------------------
 
     return TerminalTransport.of({
-      prompt: (channelId, content) =>
-        send(channelId, ThreadMessage.Prompt({ content })),
-      steer: (channelId, content) =>
-        send(channelId, ThreadMessage.Steering({ content })),
-      followUp: (channelId, content) =>
-        send(channelId, ThreadMessage.FollowUp({ content })),
-      stop: (channelId) => send(channelId, ThreadMessage.Stop()),
+      prompt: (threadId, content) =>
+        send(threadId, ThreadMessage.Prompt({ content })),
+      steer: (threadId, content) =>
+        send(threadId, ThreadMessage.Steering({ content })),
+      followUp: (threadId, content) =>
+        send(threadId, ThreadMessage.FollowUp({ content })),
+      stop: (threadId) => send(threadId, ThreadMessage.Stop()),
       waitForAgentEnd,
     });
   }),

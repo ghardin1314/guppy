@@ -9,6 +9,10 @@ export interface RouteContext {
   guppy: Guppy;
 }
 
+interface WsData {
+  channelId: string;
+}
+
 export async function createServer(
   projectDir: string,
   shell: HTMLBundle,
@@ -21,7 +25,7 @@ export async function createServer(
     dir: `${projectDir}/routes`,
   });
 
-  const clients = new Set<ServerWebSocket<unknown>>();
+  const { guppy } = options;
 
   // Watch pages/ → regenerate route manifest (new routes only)
   // Bun's built-in HMR handles pushing client updates for existing pages
@@ -52,12 +56,12 @@ export async function createServer(
     const mod = await import(match.filePath);
     const handler = mod[req.method] ?? mod.default;
     if (!handler) return new Response("Method not allowed", { status: 405 });
-    return handler(req, { params: match.params, query: match.query, guppy: options.guppy } satisfies RouteContext);
+    return handler(req, { params: match.params, query: match.query, guppy } satisfies RouteContext);
   }
 
   const port = options.port ?? (process.env.PORT ? Number(process.env.PORT) : 3456);
 
-  const server = Bun.serve({
+  const server = Bun.serve<WsData>({
     port,
 
     routes: {
@@ -66,24 +70,29 @@ export async function createServer(
     },
 
     websocket: {
-      open(ws) {
-        clients.add(ws);
-        ws.send(JSON.stringify({ type: "connected", clients: clients.size }));
-        console.log(`[ws] client connected (${clients.size} total)`);
+      async open(ws) {
+        const { channelId } = ws.data;
+        await guppy.ws.connect(channelId, ws);
+        console.log(`[ws] channel ${channelId} connected`);
       },
-      message(ws, message) {
-        ws.send(JSON.stringify({ type: "echo", data: String(message) }));
+
+      async message(ws, raw) {
+        await guppy.ws.handleMessage(ws.data.channelId, String(raw));
       },
-      close(ws) {
-        clients.delete(ws);
-        console.log(`[ws] client disconnected (${clients.size} total)`);
+
+      async close(ws) {
+        const { channelId } = ws.data;
+        await guppy.ws.disconnect(channelId);
+        console.log(`[ws] channel ${channelId} disconnected`);
       },
     },
 
     fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === "/ws") {
-        if (server.upgrade(req)) return undefined as unknown as Response;
+        const channelId = crypto.randomUUID();
+        if (server.upgrade(req, { data: { channelId } }))
+          return undefined as unknown as Response;
         return new Response("WebSocket upgrade failed", { status: 400 });
       }
       return new Response("Not found", { status: 404 });

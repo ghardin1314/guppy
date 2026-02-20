@@ -7,6 +7,7 @@ import {
   TransportNotFoundError,
 } from "./transport-registry.ts";
 import type { Transport } from "./transport.ts";
+import { TransportId } from "./schema.ts";
 
 // -- Helpers ------------------------------------------------------------------
 
@@ -22,7 +23,7 @@ it.layer(TransportRegistryLive)("transport-registry", (it) => {
     Effect.gen(function* () {
       const registry = yield* TransportRegistry;
 
-      const error = yield* registry.lookup("nope").pipe(Effect.flip);
+      const error = yield* registry.lookup(TransportId.make("nope")).pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(TransportNotFoundError);
       expect(error.name).toBe("nope");
@@ -33,9 +34,9 @@ it.layer(TransportRegistryLive)("transport-registry", (it) => {
     Effect.gen(function* () {
       const registry = yield* TransportRegistry;
       const t = dummyTransport("slack");
-      yield* registry.register("slack", t);
+      yield* registry.register(TransportId.make("slack"), t);
 
-      const result = yield* registry.lookup("slack");
+      const result = yield* registry.lookup(TransportId.make("slack"));
       expect(result).toBe(t);
     }),
   );
@@ -45,11 +46,11 @@ it.layer(TransportRegistryLive)("transport-registry", (it) => {
       const registry = yield* TransportRegistry;
       const t1 = dummyTransport("a");
       const t2 = dummyTransport("b");
-      yield* registry.register("a", t1);
-      yield* registry.register("b", t2);
+      yield* registry.register(TransportId.make("a"), t1);
+      yield* registry.register(TransportId.make("b"), t2);
 
-      expect(yield* registry.lookup("a")).toBe(t1);
-      expect(yield* registry.lookup("b")).toBe(t2);
+      expect(yield* registry.lookup(TransportId.make("a"))).toBe(t1);
+      expect(yield* registry.lookup(TransportId.make("b"))).toBe(t2);
     }),
   );
 
@@ -58,10 +59,10 @@ it.layer(TransportRegistryLive)("transport-registry", (it) => {
       const registry = yield* TransportRegistry;
       const v1 = dummyTransport("v1");
       const v2 = dummyTransport("v2");
-      yield* registry.register("overwrite-me", v1);
-      yield* registry.register("overwrite-me", v2);
+      yield* registry.register(TransportId.make("overwrite-me"), v1);
+      yield* registry.register(TransportId.make("overwrite-me"), v2);
 
-      const result = yield* registry.lookup("overwrite-me");
+      const result = yield* registry.lookup(TransportId.make("overwrite-me"));
       expect(result).toBe(v2);
     }),
   );

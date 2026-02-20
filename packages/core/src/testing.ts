@@ -26,6 +26,7 @@ import {
 import { ThreadStore } from "./repository.ts";
 import { TransportService, type Transport } from "./transport.ts";
 import { TransportRegistry } from "./transport-registry.ts";
+import { TransportId, ThreadId } from "./schema.ts";
 
 export { it } from "./test.ts";
 
@@ -239,8 +240,8 @@ export function makeInstrumentedAgentFactory(opts?: {
 // -- Test transport -----------------------------------------------------------
 
 export interface TestTransportState {
-  readonly contextCalls: string[];
-  readonly delivered: Array<{ threadId: string; event: AgentEvent }>;
+  readonly contextCalls: ThreadId[];
+  readonly delivered: Array<{ threadId: ThreadId; event: AgentEvent }>;
   contextValue: string;
 }
 
@@ -273,7 +274,7 @@ export function makeTestTransport(contextValue = ""): {
 }
 
 export function makeRegisteredTestTransport(
-  name: string,
+  name: TransportId,
   contextValue = "",
 ): {
   state: TestTransportState;
@@ -316,22 +317,23 @@ export function collectUntilEnd(
  * Creates a thread via ThreadStore, spawns it, runs fn, then closes scope.
  */
 export const withThread = (
-  channelId: string,
+  threadId: string,
   fn: (
     handle: AgentThreadHandle,
-    threadId: string,
+    threadId: ThreadId,
   ) => Effect.Effect<void, unknown, ThreadStore | AgentFactory>,
 ) =>
   Effect.gen(function* () {
     const store = yield* ThreadStore;
-    const thread = yield* store.getOrCreateThread("test", channelId);
+    const tid = ThreadId.make(threadId);
+    yield* store.getOrCreateThread(TransportId.make("test"), tid);
 
     const scope = yield* Scope.make();
-    const handle = yield* spawn(thread.id, testConfig).pipe(
+    const handle = yield* spawn(testConfig, tid).pipe(
       Effect.provideService(Scope.Scope, scope),
     );
 
-    yield* fn(handle, thread.id);
+    yield* fn(handle, tid);
 
     yield* Scope.close(scope, Exit.succeed(void 0));
   });

@@ -8,6 +8,8 @@ export { EventBus, EventBusLive } from "./event-bus.ts";
 export type { EventBusService } from "./event-bus.ts";
 export { EventStore, EventStoreLive } from "./event-store.ts";
 export type { EventStoreService } from "./event-store.ts";
+export { Guppy } from "./guppy.ts";
+export type { CoreServices, GuppyConfig } from "./guppy.ts";
 export { nanoid } from "./id.ts";
 export { Orchestrator, OrchestratorError } from "./orchestrator.ts";
 export type {
@@ -37,6 +39,9 @@ export {
 export type { TransportRegistryService } from "./transport-registry.ts";
 export { TransportService } from "./transport.ts";
 export type { Transport } from "./transport.ts";
-export * from "./types.ts";
-export { Guppy } from "./guppy.ts";
-export type { GuppyConfig, CoreServices } from "./guppy.ts";
+export { WebsocketTransport, WebsocketTransportLive } from "./ws-transport.ts";
+export type {
+  ClientMessage,
+  ServerMessage,
+  WebsocketTransportService,
+} from "./ws-transport.ts";

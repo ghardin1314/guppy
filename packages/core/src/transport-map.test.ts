@@ -8,6 +8,7 @@ import {
   TransportNotFoundError,
 } from "./transport-registry.ts";
 import { TransportMap } from "./transport-map.ts";
+import { TransportId, ThreadId } from "./schema.ts";
 
 // -- Layers -------------------------------------------------------------------
 
@@ -30,12 +31,12 @@ it.layer(TestLayer)("transport-map", (it) => {
         getContext: () => Effect.succeed("map-context"),
         deliver: () => Effect.void,
       };
-      yield* registry.register("mapped", t);
+      yield* registry.register(TransportId.make("mapped"), t);
 
       const transport = yield* TransportService.pipe(
-        Effect.provide(transportMap.get("mapped")),
+        Effect.provide(transportMap.get(TransportId.make("mapped"))),
       );
-      const ctx = yield* transport.getContext("t1");
+      const ctx = yield* transport.getContext(ThreadId.make("t1"));
       expect(ctx).toBe("map-context");
     }),
   );
@@ -45,7 +46,7 @@ it.layer(TestLayer)("transport-map", (it) => {
       const transportMap = yield* TransportMap;
 
       const error = yield* TransportService.pipe(
-        Effect.provide(transportMap.get("ghost")),
+        Effect.provide(transportMap.get(TransportId.make("ghost"))),
         Effect.flip,
       );
 

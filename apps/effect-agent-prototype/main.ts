@@ -8,10 +8,13 @@ import {
   PiAgentFactoryLive,
   ThreadStore,
   ThreadStoreLive,
+  TransportId,
+  ThreadId,
   TransportMap,
   TransportRegistryLive,
   type AgentThreadConfig,
   type GuppyEvent,
+  type ThreadKey,
 } from "@guppy/core";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { getModel } from "@mariozechner/pi-ai";
@@ -101,7 +104,9 @@ const askLine = readLine("> ");
  * a steering input loop. Typing mid-stream sends a steering message;
  * typing "/stop" aborts the agent.
  */
-const waitWithSteering = (channelId: string) =>
+const TERMINAL = TransportId.make("terminal");
+
+const waitWithSteering = (threadId: ThreadId) =>
   Effect.gen(function* () {
     const t = yield* TerminalTransport;
     yield* Effect.race(
@@ -111,9 +116,9 @@ const waitWithSteering = (channelId: string) =>
           const line = yield* readLine("");
           if (!line) continue;
           if (line === "/stop") {
-            yield* t.stop(channelId);
+            yield* t.stop(threadId);
           } else {
-            yield* t.steer(channelId, line);
+            yield* t.steer(threadId, line);
           }
         }
       }),
@@ -123,11 +128,11 @@ const waitWithSteering = (channelId: string) =>
 // -- Main ---------------------------------------------------------------------
 
 const makeEvent = (
-  channelId: string,
+  threadId: string,
   payload: string,
 ): GuppyEvent => ({
   type: "agent.message",
-  targetThreadId: channelId,
+  targetThreadId: threadId,
   sourceThreadId: null,
   payload,
 });
@@ -142,7 +147,7 @@ const main = Effect.gen(function* () {
   yield* bus.subscribe("terminal-scheduler", "agent.*", (event) =>
     Effect.gen(function* () {
       console.log(`\n[scheduled] delivering: ${event.payload}`);
-      yield* t.prompt(event.targetThreadId, event.payload);
+      yield* t.prompt(ThreadId.make(event.targetThreadId), event.payload);
     }).pipe(
       Effect.catchAll((e) =>
         Effect.sync(() => console.error("[schedule error]", e)),
@@ -150,8 +155,8 @@ const main = Effect.gen(function* () {
     ),
   );
 
-  let channelId = "default";
-  let thread = yield* store.getOrCreateThread("terminal", channelId);
+  let threadId = ThreadId.make("default");
+  let thread = yield* store.getOrCreateThread(TERMINAL, threadId);
 
   console.log("Effect agent prototype ready.");
   console.log(
@@ -160,7 +165,7 @@ const main = Effect.gen(function* () {
   console.log("Schedule: /schedule <dur> <msg>, /cron <5-fields> <msg>");
   console.log("         /schedules, /cancel <id>");
   console.log("Type mid-stream to steer. /stop to abort.\n");
-  console.log(`Thread: ${thread.id.slice(0, 8)}...\n`);
+  console.log(`Thread: ${thread.threadKey.slice(0, 8)}...\n`);
 
   let running = true;
   while (running) {
@@ -178,23 +183,23 @@ const main = Effect.gen(function* () {
           break;
 
         case "/new": {
-          channelId = crypto.randomUUID().slice(0, 8);
-          thread = yield* store.getOrCreateThread("terminal", channelId);
-          console.log(`New thread: ${thread.id.slice(0, 8)}...`);
+          threadId = ThreadId.make(crypto.randomUUID().slice(0, 8));
+          thread = yield* store.getOrCreateThread(TERMINAL, threadId);
+          console.log(`New thread: ${thread.threadKey.slice(0, 8)}...`);
           break;
         }
 
         case "/threads": {
-          const threads = yield* store.listThreads("terminal");
+          const threads = yield* store.listThreads(TERMINAL);
           if (threads.length === 0) {
             console.log("No threads.");
             break;
           }
           for (const t of threads) {
-            const count = yield* store.countMessages(t.id);
-            const active = t.id === thread.id ? " ← current" : "";
+            const count = yield* store.countMessages(t.threadKey);
+            const active = t.threadKey === thread.threadKey ? " ← current" : "";
             console.log(
-              `  ${t.id.slice(0, 8)}  ${t.channelId}  ${count} msgs${active}`,
+              `  ${t.threadKey.slice(0, 8)}  ${t.threadId}  ${count} msgs${active}`,
             );
           }
           break;
@@ -206,15 +211,15 @@ const main = Effect.gen(function* () {
             console.log("Usage: /switch <id-prefix>");
             break;
           }
-          const threads = yield* store.listThreads("terminal");
-          const match = threads.find((t) => t.id.startsWith(prefix));
+          const threads = yield* store.listThreads(TERMINAL);
+          const match = threads.find((t) => t.threadKey.startsWith(prefix));
           if (!match) {
             console.log(`No thread matching '${prefix}'`);
             break;
           }
           thread = match;
-          channelId = thread.channelId;
-          console.log(`Switched to thread: ${thread.id.slice(0, 8)}...`);
+          threadId = thread.threadId;
+          console.log(`Switched to thread: ${thread.threadKey.slice(0, 8)}...`);
           break;
         }
 
@@ -224,8 +229,8 @@ const main = Effect.gen(function* () {
             console.log("Usage: /followup <text>");
             break;
           }
-          yield* t.followUp(channelId, content);
-          yield* waitWithSteering(channelId);
+          yield* t.followUp(threadId, content);
+          yield* waitWithSteering(threadId);
           console.log();
           break;
         }
@@ -253,7 +258,7 @@ const main = Effect.gen(function* () {
             timeZone: "UTC",
           });
           const sched = yield* bus
-            .schedule(makeEvent(channelId, message), {
+            .schedule(makeEvent(threadId, message), {
               type: "delayed",
               scheduledAt,
             })
@@ -286,7 +291,7 @@ const main = Effect.gen(function* () {
             break;
           }
           const sched = yield* bus
-            .schedule(makeEvent(channelId, message), {
+            .schedule(makeEvent(threadId, message), {
               type: "cron",
               cronExpression: cronExpr,
             })
@@ -355,8 +360,8 @@ const main = Effect.gen(function* () {
 
     // -- Prompt ---------------------------------------------------------------
 
-    yield* t.prompt(channelId, input);
-    yield* waitWithSteering(channelId);
+    yield* t.prompt(threadId, input);
+    yield* waitWithSteering(threadId);
 
     console.log();
   }

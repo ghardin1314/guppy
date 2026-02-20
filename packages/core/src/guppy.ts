@@ -16,8 +16,14 @@ import { EventStore, EventStoreLive } from "./event-store.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { ThreadStore, ThreadStoreLive } from "./repository.ts";
 import type { GuppyEvent, EventSchedule, ScheduleTiming } from "./schema.ts";
+import { ThreadMessage } from "./thread-message.ts";
 import { TransportMap } from "./transport-map.ts";
 import { TransportRegistry, TransportRegistryLive } from "./transport-registry.ts";
+import type { ThreadId } from "./schema.ts";
+import {
+  WebsocketTransport,
+  WebsocketTransportLive,
+} from "./ws-transport.ts";
 
 // -- Config -------------------------------------------------------------------
 
@@ -77,14 +83,78 @@ function makeCoreLive(
   );
 }
 
+// -- WS namespace (plain-TS facade) -------------------------------------------
+
+class GuppyWs {
+  constructor(
+    private readonly getRuntime: () => ManagedRuntime.ManagedRuntime<
+      CoreServices | WebsocketTransport,
+      unknown
+    >,
+  ) {}
+
+  private run<A>(effect: Effect.Effect<A, unknown, WebsocketTransport>) {
+    return this.getRuntime().runPromise(effect);
+  }
+
+  connect(channelId: string, client: { send(data: string): void }) {
+    return this.run(
+      Effect.flatMap(WebsocketTransport, (ws) =>
+        ws.connect(channelId, client),
+      ),
+    );
+  }
+
+  disconnect(channelId: string) {
+    return this.run(
+      Effect.flatMap(WebsocketTransport, (ws) => ws.disconnect(channelId)),
+    );
+  }
+
+  handleMessage(channelId: string, raw: string) {
+    return this.run(
+      Effect.flatMap(WebsocketTransport, (ws) =>
+        ws.handleMessage(channelId, raw),
+      ),
+    );
+  }
+
+  subscribe(channelId: string, threadId: ThreadId) {
+    return this.run(
+      Effect.flatMap(WebsocketTransport, (ws) =>
+        ws.subscribe(channelId, threadId),
+      ),
+    );
+  }
+
+  unsubscribe(channelId: string, threadId: ThreadId) {
+    return this.run(
+      Effect.flatMap(WebsocketTransport, (ws) =>
+        ws.unsubscribe(channelId, threadId),
+      ),
+    );
+  }
+
+  send(threadId: ThreadId, msg: ThreadMessage) {
+    return this.run(
+      Effect.flatMap(WebsocketTransport, (ws) => ws.send(threadId, msg)),
+    );
+  }
+}
+
 // -- Guppy class --------------------------------------------------------------
 
 export class Guppy<Extra = never> {
   private readonly config: GuppyConfig;
   private readonly agentFactoryLayer: Layer.Layer<AgentFactory>;
   private accumulated: Layer.Layer<Extra, unknown, CoreServices>;
-  private runtime: ManagedRuntime.ManagedRuntime<CoreServices | Extra, unknown> | null =
-    null;
+  private runtime: ManagedRuntime.ManagedRuntime<
+    CoreServices | WebsocketTransport | Extra,
+    unknown
+  > | null = null;
+
+  /** WebSocket channel/thread management methods */
+  readonly ws: GuppyWs;
 
   private constructor(
     config: GuppyConfig,
@@ -94,6 +164,10 @@ export class Guppy<Extra = never> {
     this.config = config;
     this.agentFactoryLayer = agentFactoryLayer;
     this.accumulated = accumulated;
+    this.ws = new GuppyWs(() => {
+      if (!this.runtime) throw new Error("Guppy not booted");
+      return this.runtime;
+    });
   }
 
   static create(config: GuppyConfig): Guppy {
@@ -135,11 +209,14 @@ export class Guppy<Extra = never> {
 
     const coreLive = makeCoreLive(this.config, this.agentFactoryLayer);
 
+    // WebsocketTransport layer — depends on core services
+    const wsLayer = Layer.provide(WebsocketTransportLive, coreLive);
+
     // Provide core services to accumulated transport layers
     const provided = Layer.provide(this.accumulated, coreLive);
 
-    // Merge core + provided transport layers into final layer
-    const main = Layer.mergeAll(coreLive, provided);
+    // Merge core + ws + provided transport layers into final layer
+    const main = Layer.mergeAll(coreLive, wsLayer, provided);
 
     this.runtime = ManagedRuntime.make(main);
 

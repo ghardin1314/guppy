@@ -8,16 +8,17 @@
 
 import { Context, Effect, HashMap, Layer, Ref, Schema } from "effect";
 import type { Transport } from "./transport.ts";
+import type { TransportId } from "./schema.ts";
 
 // -- Service interface --------------------------------------------------------
 
 export interface TransportRegistryService {
   readonly register: (
-    name: string,
+    name: TransportId,
     transport: Transport,
   ) => Effect.Effect<void>;
   readonly lookup: (
-    name: string,
+    name: TransportId,
   ) => Effect.Effect<Transport, TransportNotFoundError>;
 }
 
@@ -39,7 +40,7 @@ export class TransportNotFoundError extends Schema.TaggedError<TransportNotFound
 export const TransportRegistryLive = Layer.effect(
   TransportRegistry,
   Effect.gen(function* () {
-    const ref = yield* Ref.make(HashMap.empty<string, Transport>());
+    const ref = yield* Ref.make(HashMap.empty<TransportId, Transport>());
 
     return TransportRegistry.of({
       register: (name, transport) =>

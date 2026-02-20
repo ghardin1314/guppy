@@ -13,15 +13,21 @@ import {
   testConfig,
 } from "./testing.ts";
 import { TransportNotFoundError } from "./transport-registry.ts";
+import { TransportId, ThreadId } from "./schema.ts";
+
+const TEST = TransportId.make("test");
+const A = TransportId.make("transport-a");
+const B = TransportId.make("transport-b");
+const tid = ThreadId.make;
 
 // -- Test transport -----------------------------------------------------------
 
 const { state: transportState, layer: RegisterTransportLayer } =
-  makeRegisteredTestTransport("test");
+  makeRegisteredTestTransport(TEST);
 const { state: transportAState, layer: RegisterATransport } =
-  makeRegisteredTestTransport("transport-a");
+  makeRegisteredTestTransport(A);
 const { state: transportBState, layer: RegisterBTransport } =
-  makeRegisteredTestTransport("transport-b");
+  makeRegisteredTestTransport(B);
 
 // -- Layers -------------------------------------------------------------------
 
@@ -64,8 +70,8 @@ it.layer(TestLayer)("orchestrator", (it) => {
       const deliveredBefore = transportState.delivered.length;
 
       yield* orchestrator.send(
-        "test",
-        "chan-2",
+        TEST,
+        tid("chan-2"),
         ThreadMessage.Prompt({ content: "hello orchestrator" }),
       );
 
@@ -82,18 +88,18 @@ it.layer(TestLayer)("orchestrator", (it) => {
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator;
 
-      const before = yield* orchestrator.events("test", "chan-3");
+      const before = yield* orchestrator.events(TEST, tid("chan-3"));
       expect(before).toBeNull();
 
       yield* orchestrator.send(
-        "test",
-        "chan-3",
+        TEST,
+        tid("chan-3"),
         ThreadMessage.Prompt({ content: "stream test" }),
       );
 
       yield* Effect.sleep("50 millis");
 
-      const after = yield* orchestrator.events("test", "chan-3");
+      const after = yield* orchestrator.events(TEST, tid("chan-3"));
       expect(after).not.toBeNull();
     }),
   );
@@ -105,8 +111,8 @@ it.layer(TestLayer)("orchestrator", (it) => {
       const before = transportState.contextCalls.length;
 
       yield* orchestrator.send(
-        "test",
-        "chan-4",
+        TEST,
+        tid("chan-4"),
         ThreadMessage.Prompt({ content: "ctx check" }),
       );
 
@@ -122,15 +128,15 @@ it.layer(TestLayer)("orchestrator", (it) => {
       const store = yield* ThreadStore;
 
       yield* orchestrator.send(
-        "test",
-        "chan-5",
+        TEST,
+        tid("chan-5"),
         ThreadMessage.Prompt({ content: "persist through orch" }),
       );
 
       yield* Effect.sleep("50 millis");
 
-      const thread = yield* store.getOrCreateThread("test", "chan-5");
-      const ctx = yield* store.getContext(thread.id);
+      const thread = yield* store.getOrCreateThread(TEST, tid("chan-5"));
+      const ctx = yield* store.getContext(thread.threadId);
       expect(ctx.length).toBeGreaterThanOrEqual(2);
       expect(ctx[0]!.role).toBe("user");
       expect(ctx[1]!.role).toBe("assistant");
@@ -143,43 +149,42 @@ it.layer(TestLayer)("orchestrator", (it) => {
       const store = yield* ThreadStore;
 
       yield* orchestrator.send(
-        "test",
-        "chan-reuse",
+        TEST,
+        tid("chan-reuse"),
         ThreadMessage.Prompt({ content: "first" }),
       );
       yield* Effect.sleep("50 millis");
 
       yield* orchestrator.send(
-        "test",
-        "chan-reuse",
+        TEST,
+        tid("chan-reuse"),
         ThreadMessage.Prompt({ content: "second" }),
       );
       yield* Effect.sleep("50 millis");
 
-      const thread = yield* store.getOrCreateThread("test", "chan-reuse");
-      const ctx = yield* store.getContext(thread.id);
+      const thread = yield* store.getOrCreateThread(TEST, tid("chan-reuse"));
+      const ctx = yield* store.getContext(thread.threadId);
       expect(ctx.length).toBeGreaterThanOrEqual(4);
     }),
   );
 
-  it.live("same channelId on different transports creates separate threads", () =>
+  it.live("different transports route events independently", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator;
-      const store = yield* ThreadStore;
 
       const aBefore = transportAState.delivered.length;
       const bBefore = transportBState.delivered.length;
 
       yield* orchestrator.send(
-        "transport-a",
-        "chan-multi",
+        A,
+        tid("a-thread"),
         ThreadMessage.Prompt({ content: "for A" }),
       );
       yield* Effect.sleep("50 millis");
 
       yield* orchestrator.send(
-        "transport-b",
-        "chan-multi",
+        B,
+        tid("b-thread"),
         ThreadMessage.Prompt({ content: "for B" }),
       );
       yield* Effect.sleep("50 millis");
@@ -191,14 +196,9 @@ it.layer(TestLayer)("orchestrator", (it) => {
       expect(aDelivered.length).toBeGreaterThan(0);
       expect(bDelivered.length).toBeGreaterThan(0);
 
-      // Separate threads created
-      const threadA = yield* store.getOrCreateThread("transport-a", "chan-multi");
-      const threadB = yield* store.getOrCreateThread("transport-b", "chan-multi");
-      expect(threadA.id).not.toBe(threadB.id);
-
       // No cross-talk
-      expect(aDelivered.every((d) => d.threadId === threadA.id)).toBe(true);
-      expect(bDelivered.every((d) => d.threadId === threadB.id)).toBe(true);
+      expect(aDelivered.every((d) => d.threadId === tid("a-thread"))).toBe(true);
+      expect(bDelivered.every((d) => d.threadId === tid("b-thread"))).toBe(true);
     }),
   );
 
@@ -208,8 +208,8 @@ it.layer(TestLayer)("orchestrator", (it) => {
 
       const error = yield* orchestrator
         .send(
-          "nonexistent",
-          "chan-unknown-transport",
+          TransportId.make("nonexistent"),
+          tid("chan-unknown-transport"),
           ThreadMessage.Prompt({ content: "hello" }),
         )
         .pipe(Effect.flip);

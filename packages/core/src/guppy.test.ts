@@ -4,6 +4,7 @@ import { Guppy } from "./guppy.ts";
 import { EchoAgentFactoryLive, testConfig } from "./testing.ts";
 import { EventBus } from "./event-bus.ts";
 import { TransportRegistry } from "./transport-registry.ts";
+import { TransportId } from "./schema.ts";
 import type { GuppyEvent } from "./schema.ts";
 
 function createTestGuppy() {
@@ -87,7 +88,7 @@ describe("Guppy", () => {
     const transportLayer = Layer.effectDiscard(
       Effect.gen(function* () {
         const registry = yield* TransportRegistry;
-        yield* registry.register("test-transport", {
+        yield* registry.register(TransportId.make("test-transport"), {
           getContext: () => Effect.succeed(""),
           deliver: () => Effect.void,
         });

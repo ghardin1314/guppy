@@ -1,5 +1,46 @@
 import { Schema } from "effect";
 
+// -- Branded identifiers ------------------------------------------------------
+
+/** Transport name (e.g. "web", "cli"). */
+export const TransportId = Schema.String.pipe(Schema.brand("TransportId"));
+export type TransportId = Schema.Schema.Type<typeof TransportId>;
+
+/** Globally unique thread identifier. */
+export const ThreadId = Schema.String.pipe(Schema.brand("ThreadId"));
+export type ThreadId = Schema.Schema.Type<typeof ThreadId>;
+
+// -- Threads ------------------------------------------------------------------
+
+export const ThreadStatus = Schema.Literal("idle", "active");
+export type ThreadStatus = Schema.Schema.Type<typeof ThreadStatus>;
+
+export const Thread = Schema.Struct({
+  threadId: ThreadId,
+  transport: TransportId,
+  status: ThreadStatus,
+  createdAt: Schema.Number,
+  lastActiveAt: Schema.Number,
+  leafId: Schema.String.pipe(Schema.NullOr),
+  metadata: Schema.String,
+});
+export type Thread = Schema.Schema.Type<typeof Thread>;
+
+// -- Messages -----------------------------------------------------------------
+
+export const MessageRole = Schema.Literal("user", "assistant", "tool_result", "summary");
+export type MessageRole = Schema.Schema.Type<typeof MessageRole>;
+
+export const Message = Schema.Struct({
+  id: Schema.String,
+  threadId: ThreadId,
+  parentId: Schema.String.pipe(Schema.NullOr),
+  role: MessageRole,
+  content: Schema.String,
+  createdAt: Schema.Number,
+});
+export type Message = Schema.Schema.Type<typeof Message>;
+
 // -- Events -------------------------------------------------------------------
 
 export const AgentMessageEvent = Schema.Struct({

@@ -13,6 +13,7 @@ import {
   withThread,
   testConfig,
 } from "./testing.ts";
+import { TransportId, ThreadId } from  "./schema.ts";
 
 // -- Layers -------------------------------------------------------------------
 
@@ -230,17 +231,18 @@ it.layer(InstrumentedTestLayer)("agent-thread (instrumented)", (it) => {
   it.live("rehydration loads existing history on spawn", () =>
     Effect.gen(function* () {
       const store = yield* ThreadStore;
-      const thread = yield* store.getOrCreateThread("test", "t-rehydrate");
+      const tid = ThreadId.make("t-rehydrate");
+      yield* store.getOrCreateThread(TransportId.make("test"), tid);
 
       // Pre-populate DB with user + assistant messages
       const m1 = yield* store.insertMessage(
-        thread.id,
+        tid,
         null,
         "user",
         JSON.stringify([{ type: "text", text: "old question" }]),
       );
       yield* store.insertMessage(
-        thread.id,
+        tid,
         m1.id,
         "assistant",
         JSON.stringify({
@@ -272,7 +274,7 @@ it.layer(InstrumentedTestLayer)("agent-thread (instrumented)", (it) => {
 
       // Spawn thread — should rehydrate with existing messages
       const scope = yield* Scope.make();
-      const handle = yield* spawn(thread.id, testConfig).pipe(
+      const handle = yield* spawn(testConfig, tid).pipe(
         Effect.provideService(Scope.Scope, scope),
       );
 
@@ -286,7 +288,7 @@ it.layer(InstrumentedTestLayer)("agent-thread (instrumented)", (it) => {
       yield* Fiber.join(fiber);
       yield* Effect.sleep("200 millis");
 
-      const ctx = yield* store.getContext(thread.id);
+      const ctx = yield* store.getContext(tid);
       expect(ctx.length).toBeGreaterThanOrEqual(4);
       expect(ctx[0]!.role).toBe("user");
       expect(ctx[1]!.role).toBe("assistant");

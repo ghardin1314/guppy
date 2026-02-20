@@ -28,7 +28,7 @@ import { AgentError, AgentFactory, type CreateAgentConfig } from "./agent.ts";
 import { ThreadStore } from "./repository.ts";
 import { TransportService } from "./transport.ts";
 import { ThreadMessage } from "./thread-message.ts";
-import type { Message } from "./types.ts";
+import type { Message, ThreadId } from "./schema.ts";
 
 // -- Config -------------------------------------------------------------------
 
@@ -94,8 +94,8 @@ function agentMessageToRow(msg: AgentMessage): {
  * Requires TransportService to be provided (typically via TransportMap.get).
  */
 export const spawn = (
-  threadId: string,
   config: AgentThreadConfig,
+  threadId: ThreadId,
 ): Effect.Effect<
   AgentThreadHandle,
   SqlError.SqlError | AgentError,
