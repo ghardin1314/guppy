@@ -6,32 +6,32 @@ import { tmpdir } from "os";
 import { $, type Subprocess } from "bun";
 const webPkgDir = join(import.meta.dir, "../../web");
 const corePkgDir = join(import.meta.dir, "../../core");
-const transportWsPkgDir = join(import.meta.dir, "../../transport-ws");
+const transportSsePkgDir = join(import.meta.dir, "../../transport-sse");
 let webTarball: string;
 let coreTarball: string;
-let transportWsTarball: string;
+let transportSseTarball: string;
 let webVersion: string;
 let coreVersion: string;
-let transportWsVersion: string;
+let transportSseVersion: string;
 
 beforeAll(async () => {
-  // Pack @guppy/web, @guppy/core, and @guppy/transport-ws into tarballs for integration tests
-  const [webResult, coreResult, transportWsResult] = await Promise.all([
+  // Pack @guppy/web, @guppy/core, and @guppy/transport-sse into tarballs for integration tests
+  const [webResult, coreResult, transportSseResult] = await Promise.all([
     $`cd ${webPkgDir} && bun pm pack`.text(),
     $`cd ${corePkgDir} && bun pm pack`.text(),
-    $`cd ${transportWsPkgDir} && bun pm pack`.text(),
+    $`cd ${transportSsePkgDir} && bun pm pack`.text(),
   ]);
   const parseTgz = (output: string) => output.split("\n").find((l) => l.trim().endsWith(".tgz") && !l.includes(" "))!.trim();
   webTarball = join(webPkgDir, parseTgz(webResult));
   coreTarball = join(corePkgDir, parseTgz(coreResult));
-  transportWsTarball = join(transportWsPkgDir, parseTgz(transportWsResult));
+  transportSseTarball = join(transportSsePkgDir, parseTgz(transportSseResult));
 
   const webPkg: { version: string } = await Bun.file(join(webPkgDir, "package.json")).json();
   webVersion = webPkg.version;
   const corePkg: { version: string } = await Bun.file(join(corePkgDir, "package.json")).json();
   coreVersion = corePkg.version;
-  const transportWsPkg: { version: string } = await Bun.file(join(transportWsPkgDir, "package.json")).json();
-  transportWsVersion = transportWsPkg.version;
+  const transportSsePkg: { version: string } = await Bun.file(join(transportSsePkgDir, "package.json")).json();
+  transportSseVersion = transportSsePkg.version;
 });
 
 describe("scaffold", () => {
@@ -68,7 +68,7 @@ describe("scaffold", () => {
       const pkg = await Bun.file(join(dir, "package.json")).json();
       expect(pkg.name).toBe("guppy-app");
       expect(pkg.dependencies["@guppy/core"]).toBe(`^${coreVersion}`);
-      expect(pkg.dependencies["@guppy/transport-ws"]).toBe(`^${transportWsVersion}`);
+      expect(pkg.dependencies["@guppy/transport-sse"]).toBe(`^${transportSseVersion}`);
       expect(pkg.dependencies["@guppy/web"]).toBe(`^${webVersion}`);
       expect(pkg.dependencies["react"]).toBeDefined();
       expect(pkg.dependencies["react-router"]).toBeDefined();
@@ -101,7 +101,7 @@ describe("scaffold", () => {
       await scaffold(dir, {
         packageOverrides: {
           "@guppy/core": `file:${coreTarball}`,
-          "@guppy/transport-ws": `file:${transportWsTarball}`,
+          "@guppy/transport-sse": `file:${transportSseTarball}`,
           "@guppy/web": `file:${webTarball}`,
         },
       });
@@ -158,7 +158,7 @@ describe("scaffold", () => {
     }
   }, 30_000);
 
-  test("WebSocket connects and receives agent events", async () => {
+  test("SSE connects and receives agent events", async () => {
     const dir = await mkdtemp(join(tmpdir(), "guppy-test-"));
     let proc: Subprocess | undefined;
 
@@ -166,7 +166,7 @@ describe("scaffold", () => {
       await scaffold(dir, {
         packageOverrides: {
           "@guppy/core": `file:${coreTarball}`,
-          "@guppy/transport-ws": `file:${transportWsTarball}`,
+          "@guppy/transport-sse": `file:${transportSseTarball}`,
           "@guppy/web": `file:${webTarball}`,
         },
       });
@@ -200,63 +200,46 @@ describe("scaffold", () => {
       }
       expect(ready).toBe(true);
 
-      // Connect WebSocket
-      const ws = new WebSocket(`ws://localhost:${port}/ws`);
-      const messages: unknown[] = [];
+      // Connect SSE to a test thread
+      const threadId = "test-thread";
+      const response = await fetch(`${base}/events/${threadId}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("text/event-stream");
 
-      const connected = new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("WS connect timeout")), 5_000);
-        ws.onmessage = (event) => {
-          const msg = JSON.parse(String(event.data));
-          messages.push(msg);
-          if (msg.type === "connected") {
-            clearTimeout(timeout);
-            resolve();
-          }
-        };
-        ws.onerror = (e) => {
-          clearTimeout(timeout);
-          reject(e);
-        };
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      // Read until we get the "connected" event
+      const readUntil = async (eventType: string, timeoutMs: number) => {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+          const { value, done } = await Promise.race([
+            reader.read(),
+            Bun.sleep(100).then(() => ({ value: undefined, done: false })),
+          ]);
+          if (done) break;
+          if (value) buffer += decoder.decode(value, { stream: true });
+          if (buffer.includes(`event: ${eventType}`)) return true;
+        }
+        return false;
+      };
+
+      const gotConnected = await readUntil("connected", 5_000);
+      expect(gotConnected).toBe(true);
+
+      // Send a prompt via RPC
+      await fetch(`${base}/rpc/threads/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ json: { threadId, content: "hello" } }),
       });
 
-      await connected;
+      // Wait for agent_event
+      const gotAgentEvent = await readUntil("agent_event", 10_000);
+      expect(gotAgentEvent).toBe(true);
 
-      // Verify connected message
-      const connectedMsg = messages[0] as { type: string; channelId: string };
-      expect(connectedMsg.type).toBe("connected");
-      expect(typeof connectedMsg.channelId).toBe("string");
-
-      // Send a prompt
-      ws.send(JSON.stringify({
-        type: "prompt",
-        threadId: "test-thread",
-        content: "hello",
-      }));
-
-      // Collect messages until we get an agent_event (5s timeout)
-      const gotAgentEvent = new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("No agent_event within 5s")), 5_000);
-        ws.onmessage = (event) => {
-          const msg = JSON.parse(String(event.data));
-          messages.push(msg);
-          if (msg.type === "agent_event") {
-            clearTimeout(timeout);
-            resolve();
-          }
-        };
-      });
-
-      await gotAgentEvent;
-
-      const agentEvents = messages.filter(
-        (m): m is { type: string; threadId: string; event: unknown } =>
-          (m as { type: string }).type === "agent_event",
-      );
-      expect(agentEvents.length).toBeGreaterThanOrEqual(1);
-      expect(agentEvents[0]!.threadId).toBe("test-thread");
-
-      ws.close();
+      reader.cancel();
     } finally {
       if (proc) {
         proc.kill();

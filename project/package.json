@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@guppy/core": "workspace:*",
-    "@guppy/transport-ws": "workspace:*",
+    "@guppy/transport-sse": "workspace:*",
     "@guppy/web": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.53.0",
     "@mariozechner/pi-ai": "^0.53.0",

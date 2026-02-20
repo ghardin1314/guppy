@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir } from "fs/promises";
-import { join, dirname } from "path";
+import { dirname, join } from "path";
 
 interface ScaffoldOptions {
   /** Override dependency versions in generated package.json (e.g. point @guppy/web at a tarball) */
@@ -34,15 +34,15 @@ export async function scaffold(targetDir: string, options?: ScaffoldOptions) {
     join(templateDir, "package.json"),
   ).json();
 
-  const [webVersion, coreVersion, transportWsVersion] = await Promise.all([
+  const [webVersion, coreVersion, transportSseVersion] = await Promise.all([
     getPkgVersion("@guppy/web"),
     getPkgVersion("@guppy/core"),
-    getPkgVersion("@guppy/transport-ws"),
+    getPkgVersion("@guppy/transport-sse"),
   ]);
 
   const versionMap: Record<string, string> = {
     "@guppy/core": `^${coreVersion}`,
-    "@guppy/transport-ws": `^${transportWsVersion}`,
+    "@guppy/transport-sse": `^${transportSseVersion}`,
     "@guppy/web": `^${webVersion}`,
   };
 
@@ -65,7 +65,10 @@ export async function scaffold(targetDir: string, options?: ScaffoldOptions) {
     pkg.overrides = { ...options.packageOverrides };
   }
 
-  await Bun.write(join(targetDir, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+  await Bun.write(
+    join(targetDir, "package.json"),
+    JSON.stringify(pkg, null, 2) + "\n",
+  );
 
   const files = await readdir(targetDir, { recursive: true });
   return { targetDir, files };

@@ -79,7 +79,7 @@
       "dependencies": {
         "@clack/prompts": "^0.9",
         "@guppy/core": "workspace:*",
-        "@guppy/transport-ws": "workspace:*",
+        "@guppy/transport-sse": "workspace:*",
         "@guppy/web": "workspace:*",
         "commander": "^13",
         "create-guppy": "workspace:*",
@@ -107,8 +107,16 @@
       "version": "0.0.0",
       "dependencies": {
         "@guppy/core": "workspace:*",
-        "@guppy/transport-ws": "workspace:*",
+        "@guppy/transport-sse": "workspace:*",
         "@guppy/web": "workspace:*",
+      },
+    },
+    "packages/transport-sse": {
+      "name": "@guppy/transport-sse",
+      "version": "0.0.0",
+      "dependencies": {
+        "@guppy/core": "workspace:*",
+        "effect": "^3.19.18",
       },
     },
     "packages/transport-ws": {
@@ -124,7 +132,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@guppy/core": "workspace:*",
-        "@guppy/transport-ws": "workspace:*",
+        "@guppy/transport-sse": "workspace:*",
         "@orpc/openapi": "^1.13.5",
         "@orpc/server": "^1.13.5",
         "zod": "^4.3.6",
@@ -134,7 +142,7 @@
       "name": "guppy-app",
       "dependencies": {
         "@guppy/core": "workspace:*",
-        "@guppy/transport-ws": "workspace:*",
+        "@guppy/transport-sse": "workspace:*",
         "@guppy/web": "workspace:*",
         "@mariozechner/pi-agent-core": "^0.53.0",
         "@mariozechner/pi-ai": "^0.53.0",
@@ -328,6 +336,8 @@
     "@guppy/cli": ["@guppy/cli@workspace:packages/cli"],
 
     "@guppy/core": ["@guppy/core@workspace:packages/core"],
+
+    "@guppy/transport-sse": ["@guppy/transport-sse@workspace:packages/transport-sse"],
 
     "@guppy/transport-ws": ["@guppy/transport-ws@workspace:packages/transport-ws"],
 

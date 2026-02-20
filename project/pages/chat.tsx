@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ServerMessage } from "@guppy/transport-ws";
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import { orpc } from "../lib/rpc";
+import { orpc, client } from "../lib/rpc";
 
 // -- Types --------------------------------------------------------------------
 
@@ -29,51 +28,55 @@ function extractText(msg: AgentMessage): string {
     .join("");
 }
 
-// -- WebSocket hook -----------------------------------------------------------
+// -- SSE hook -----------------------------------------------------------------
 
-function useGuppySocket() {
-  const wsRef = useRef<WebSocket | null>(null);
+function useGuppyEvents(threadId: string | null) {
   const [connected, setConnected] = useState(false);
-  const [channelId, setChannelId] = useState<string | null>(null);
-  const handlersRef = useRef<((msg: ServerMessage) => void)[]>([]);
+  const handlersRef = useRef<((event: AgentEvent, threadId: string) => void)[]>([]);
 
   useEffect(() => {
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${location.host}/ws`);
-    wsRef.current = ws;
-
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => {
+    if (!threadId) {
       setConnected(false);
-      setChannelId(null);
+      return;
+    }
+
+    const es = new EventSource(`/events/${threadId}`);
+
+    es.addEventListener("connected", () => {
+      setConnected(true);
+    });
+
+    es.addEventListener("agent_event", (e) => {
+      const parsed = JSON.parse(e.data);
+      const agentEvent = parsed.event as AgentEvent;
+      const tid = parsed.threadId as string;
+      for (const handler of handlersRef.current) handler(agentEvent, tid);
+    });
+
+    es.onerror = () => {
+      setConnected(false);
+      // Browser auto-reconnects; "connected" will fire again
     };
-    ws.onmessage = (e) => {
-      const msg: ServerMessage = JSON.parse(e.data);
-      if (msg.type === "connected") setChannelId(msg.channelId);
-      for (const handler of handlersRef.current) handler(msg);
-    };
 
-    return () => ws.close();
-  }, []);
+    return () => es.close();
+  }, [threadId]);
 
-  const send = useCallback((data: object) => {
-    wsRef.current?.send(JSON.stringify(data));
-  }, []);
+  const onEvent = useCallback(
+    (handler: (event: AgentEvent, threadId: string) => void) => {
+      handlersRef.current.push(handler);
+      return () => {
+        handlersRef.current = handlersRef.current.filter((h) => h !== handler);
+      };
+    },
+    [],
+  );
 
-  const onMessage = useCallback((handler: (msg: ServerMessage) => void) => {
-    handlersRef.current.push(handler);
-    return () => {
-      handlersRef.current = handlersRef.current.filter((h) => h !== handler);
-    };
-  }, []);
-
-  return { connected, channelId, send, onMessage };
+  return { connected, onEvent };
 }
 
 // -- Chat page ----------------------------------------------------------------
 
 export default function ChatPage() {
-  const { connected, send, onMessage } = useGuppySocket();
   const qc = useQueryClient();
   const { data: threads = [] } = useQuery(orpc.threads.list.queryOptions({ input: {} }));
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -84,6 +87,8 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const { connected, onEvent } = useGuppyEvents(activeThreadId);
+
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -91,12 +96,10 @@ export default function ChatPage() {
 
   // Handle incoming agent events
   useEffect(() => {
-    return onMessage((msg) => {
-      if (msg.type !== "agent_event") return;
-      const { threadId, event } = msg;
-      handleAgentEvent(threadId, event as AgentEvent);
+    return onEvent((event, threadId) => {
+      handleAgentEvent(threadId, event);
     });
-  }, [onMessage]);
+  }, [onEvent]);
 
   function handleAgentEvent(threadId: string, event: AgentEvent) {
     switch (event.type) {
@@ -175,19 +178,13 @@ export default function ChatPage() {
   function createThread() {
     const id = crypto.randomUUID();
     setActiveThreadId(id);
-    send({ type: "subscribe", threadId: id });
   }
 
   function switchThread(threadId: string) {
-    // Unsubscribe from old
-    if (activeThreadId) {
-      send({ type: "unsubscribe", threadId: activeThreadId });
-    }
     setActiveThreadId(threadId);
-    send({ type: "subscribe", threadId });
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     if (!input.trim() || !activeThreadId) return;
     const content = input.trim();
     setInput("");
@@ -204,15 +201,15 @@ export default function ChatPage() {
     // Clear tool state for new prompt
     setTools(new Map());
 
-    send({ type: "prompt", threadId: activeThreadId, content });
+    await client.threads.prompt({ threadId: activeThreadId, content });
     // Thread is created server-side on first prompt; refresh list after a delay
     setTimeout(() => qc.invalidateQueries({ queryKey: orpc.threads.key() }), 1000);
     inputRef.current?.focus();
   }
 
-  function handleStop() {
+  async function handleStop() {
     if (activeThreadId) {
-      send({ type: "stop", threadId: activeThreadId });
+      await client.threads.stop({ threadId: activeThreadId });
     }
   }
 

@@ -1,19 +1,17 @@
 {
-  "name": "@guppy/web",
+  "name": "@guppy/transport-sse",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": ["src"],
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@guppy/core": "workspace:*",
-    "@guppy/transport-sse": "workspace:*",
-    "@orpc/openapi": "^1.13.5",
-    "@orpc/server": "^1.13.5",
-    "zod": "^4.3.6"
-  },
-  "files": ["src"]
+    "effect": "^3.19.18"
+  }
 }

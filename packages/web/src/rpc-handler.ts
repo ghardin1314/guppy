@@ -1,4 +1,5 @@
 import type { Guppy } from "@guppy/core";
+import type { SseTransportAdapter } from "@guppy/transport-sse";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { Router } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
@@ -13,6 +14,7 @@ import type { GuppyContext } from "./rpc.ts";
 export function createRpcHandlers(
   router: Router<any, GuppyContext>,
   guppy: Guppy,
+  sse: SseTransportAdapter,
 ) {
   const rpcHandler = new RPCHandler(router);
   const apiHandler = new OpenAPIHandler(router);
@@ -24,7 +26,7 @@ export function createRpcHandlers(
   ): Promise<Response> {
     const { matched, response } = await handler.handle(req, {
       prefix,
-      context: { guppy, headers: req.headers },
+      context: { guppy, sse, headers: req.headers },
     });
     if (matched) return response;
     return new Response("Not found", { status: 404 });

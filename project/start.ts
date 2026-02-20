@@ -8,9 +8,9 @@ import {
   type AgentTool,
 } from "@guppy/core";
 import {
-  WebsocketTransportLive,
-  WsTransportAdapter,
-} from "@guppy/transport-ws";
+  SseTransportLive,
+  SseTransportAdapter,
+} from "@guppy/transport-sse";
 import { createServer } from "@guppy/web";
 import { router } from "./procedures/index";
 
@@ -33,8 +33,8 @@ const guppy = Guppy.create({
       "You are a helpful coding assistant. You have access to tools for reading files and running bash commands. Be concise in your responses.",
     tools,
   },
-}).register(WebsocketTransportLive);
+}).register(SseTransportLive);
 
 await guppy.boot();
-const ws = new WsTransportAdapter(guppy);
-await createServer(workspaceDir, shell, { guppy, ws, router });
+const sse = new SseTransportAdapter(guppy);
+await createServer(workspaceDir, shell, { guppy, sse, router });

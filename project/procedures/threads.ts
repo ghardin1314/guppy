@@ -31,3 +31,27 @@ export const get = procedure
     );
     return rows[0] ?? null;
   });
+
+export const prompt = procedure
+  .route({ method: "POST", path: "/threads/prompt" })
+  .input(z.object({ threadId: z.string(), content: z.string() }))
+  .handler(async ({ input, context }) => {
+    await context.sse.prompt(input.threadId, input.content);
+    return { ok: true };
+  });
+
+export const stop = procedure
+  .route({ method: "POST", path: "/threads/stop" })
+  .input(z.object({ threadId: z.string() }))
+  .handler(async ({ input, context }) => {
+    await context.sse.stop(input.threadId);
+    return { ok: true };
+  });
+
+export const steer = procedure
+  .route({ method: "POST", path: "/threads/steer" })
+  .input(z.object({ threadId: z.string(), content: z.string() }))
+  .handler(async ({ input, context }) => {
+    await context.sse.steer(input.threadId, input.content);
+    return { ok: true };
+  });
