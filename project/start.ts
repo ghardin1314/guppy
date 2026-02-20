@@ -4,7 +4,7 @@ import {
   createEditTool,
   createReadTool,
   createWriteTool,
-  getModel,
+  models,
   type AgentTool,
 } from "@guppy/core";
 import {
@@ -25,10 +25,12 @@ const tools: AgentTool<any>[] = [
   createBashTool(workspaceDir),
 ];
 
+
+
 const guppy = Guppy.create({
   projectDir: workspaceDir,
   agent: {
-    model: getModel("anthropic", "claude-sonnet-4-20250514"),
+    model: models.kimiK25,
     systemPrompt:
       "You are a helpful coding assistant. You have access to tools for reading files and running bash commands. Be concise in your responses.",
     tools,

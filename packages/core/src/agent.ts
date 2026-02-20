@@ -5,7 +5,6 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import { Agent as PiAgent } from "@mariozechner/pi-agent-core";
 import type { Model, TSchema } from "@mariozechner/pi-ai";
-import { getEnvApiKey } from "@mariozechner/pi-ai";
 import { Chunk, Context, Effect, Layer, Schema, Stream } from "effect";
 
 // -- Errors -------------------------------------------------------------------
@@ -66,7 +65,8 @@ export const PiAgentFactoryLive = Layer.succeed(AgentFactory, {
             tools: config.tools ?? [],
             messages: config.messages ?? [],
           },
-          getApiKey: (provider: string) => getEnvApiKey(provider),
+          getApiKey: (provider: string) =>
+            process.env[`${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`],
         });
 
         return {

@@ -1,4 +1,5 @@
 export { getModel } from "@mariozechner/pi-ai";
+export * as models from "./models/index.ts";
 export type { AgentEvent, AgentMessage, AgentTool } from "@mariozechner/pi-agent-core";
 export { spawn } from "./agent-thread.ts";
 export type { AgentThreadConfig, AgentThreadHandle } from "./agent-thread.ts";
