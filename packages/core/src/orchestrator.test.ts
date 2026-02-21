@@ -1,9 +1,11 @@
 import { expect } from "bun:test";
-import { Effect, Layer } from "effect";
+import { DateTime, Effect, Either, Layer } from "effect";
 import { makeDbLayer } from "./db.ts";
-import { ThreadStoreLive, ThreadStore } from "./repository.ts";
+import { EventBus } from "./event-bus.ts";
+import { ScheduleStore } from "./event-store.ts";
+import { ThreadStore } from "./repository.ts";
 import { Orchestrator } from "./orchestrator.ts";
-import { TransportRegistryLive } from "./transport-registry.ts";
+import { TransportRegistry } from "./transport-registry.ts";
 import { TransportMap } from "./transport-map.ts";
 import { ThreadMessage } from "./thread-message.ts";
 import {
@@ -32,10 +34,12 @@ const { state: transportBState, layer: RegisterBTransport } =
 // -- Layers -------------------------------------------------------------------
 
 const DbLayer = makeDbLayer(":memory:");
-const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
+const StoreLayer = Layer.provideMerge(ThreadStore.layer, DbLayer);
+const ScheduleStoreLayer = Layer.provideMerge(ScheduleStore.layer, DbLayer);
+const BusLayer = Layer.provideMerge(EventBus.layer, ScheduleStoreLayer);
 
 // Shared registry — both TransportMap and registration use the same instance
-const RegistryLayer = TransportRegistryLive;
+const RegistryLayer = TransportRegistry.layer;
 
 const TransportMapLayer = Layer.provide(
   TransportMap.DefaultWithoutDependencies,
@@ -48,11 +52,12 @@ const RegisterBLayer = Layer.provide(RegisterBTransport, RegistryLayer);
 
 const OrchestratorLayer = Layer.provide(
   Orchestrator.layer(testConfig),
-  Layer.mergeAll(StoreLayer, EchoAgentFactoryLive, TransportMapLayer),
+  Layer.mergeAll(StoreLayer, EchoAgentFactoryLive, TransportMapLayer, BusLayer),
 );
 
 const TestLayer = Layer.mergeAll(
   StoreLayer,
+  ScheduleStoreLayer,
   EchoAgentFactoryLive,
   OrchestratorLayer,
   RegisterLayer,
@@ -216,6 +221,133 @@ it.layer(TestLayer)("orchestrator", (it) => {
 
       expect(error).toBeInstanceOf(TransportNotFoundError);
       expect((error as TransportNotFoundError).name).toBe("nonexistent");
+    }),
+  );
+
+  it.live("scheduleMessage returns a pending schedule", () =>
+    Effect.gen(function* () {
+      const orch = yield* Orchestrator;
+
+      const scheduledAt = DateTime.unsafeMakeZoned(Date.now() + 60000, {
+        timeZone: "UTC",
+      });
+      const schedule = yield* orch.scheduleMessage(
+        TEST,
+        tid("sched-1"),
+        "hello later",
+        { type: "delayed", scheduledAt },
+      );
+
+      expect(schedule.id).toBeDefined();
+      expect(schedule.status).toBe("pending");
+      expect(schedule.eventType).toBe("agent.message");
+      expect(schedule.scheduleType).toBe("delayed");
+    }),
+  );
+
+  it.live("scheduled message fires and delivers to thread", () =>
+    Effect.gen(function* () {
+      const orch = yield* Orchestrator;
+
+      const deliveredBefore = transportState.delivered.length;
+
+      const scheduledAt = DateTime.unsafeMakeZoned(Date.now() + 100, {
+        timeZone: "UTC",
+      });
+      yield* orch.scheduleMessage(
+        TEST,
+        tid("sched-fire"),
+        "scheduled prompt",
+        { type: "delayed", scheduledAt },
+      );
+
+      // Wait for schedule to fire + echo agent to respond
+      yield* Effect.sleep("300 millis");
+
+      const newDelivered = transportState.delivered.slice(deliveredBefore);
+      const types = newDelivered.map((d) => d.event.type);
+      expect(types).toContain("agent_end");
+    }),
+  );
+
+  it.live("cancelSchedule prevents delivery", () =>
+    Effect.gen(function* () {
+      const orch = yield* Orchestrator;
+
+      const deliveredBefore = transportState.delivered.length;
+
+      const scheduledAt = DateTime.unsafeMakeZoned(Date.now() + 200, {
+        timeZone: "UTC",
+      });
+      const schedule = yield* orch.scheduleMessage(
+        TEST,
+        tid("sched-cancel"),
+        "should not fire",
+        { type: "delayed", scheduledAt },
+      );
+
+      yield* orch.cancelSchedule(schedule.id);
+
+      yield* Effect.sleep("400 millis");
+
+      const newDelivered = transportState.delivered.slice(deliveredBefore);
+      expect(newDelivered).toHaveLength(0);
+    }),
+  );
+
+  it.live("scheduleMessage with cron returns schedule", () =>
+    Effect.gen(function* () {
+      const orch = yield* Orchestrator;
+
+      const schedule = yield* orch.scheduleMessage(
+        TEST,
+        tid("sched-cron"),
+        "cron msg",
+        { type: "cron", cronExpression: "0 9 * * MON" },
+      );
+
+      expect(schedule.id).toBeDefined();
+      expect(schedule.status).toBe("pending");
+      expect(schedule.scheduleType).toBe("cron");
+
+      // Clean up
+      yield* orch.cancelSchedule(schedule.id);
+    }),
+  );
+
+  it.live("scheduleMessage with invalid cron rejects", () =>
+    Effect.gen(function* () {
+      const orch = yield* Orchestrator;
+
+      const result = yield* orch
+        .scheduleMessage(TEST, tid("sched-bad"), "nope", {
+          type: "cron",
+          cronExpression: "not a cron",
+        })
+        .pipe(Effect.either);
+
+      expect(Either.isLeft(result)).toBe(true);
+    }),
+  );
+
+  it.live("scheduled message persists in schedule store", () =>
+    Effect.gen(function* () {
+      const orch = yield* Orchestrator;
+      const store = yield* ScheduleStore;
+
+      const scheduledAt = DateTime.unsafeMakeZoned(Date.now() + 60000, {
+        timeZone: "UTC",
+      });
+      yield* orch.scheduleMessage(
+        TEST,
+        tid("sched-persist"),
+        "persist me",
+        { type: "delayed", scheduledAt },
+      );
+
+      const pending = yield* store.getPendingSchedules("delayed");
+      const match = pending.find((s) => s.eventType === "agent.message");
+      expect(match).toBeDefined();
     }),
   );
 });

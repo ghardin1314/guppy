@@ -6,21 +6,18 @@ import {
   Either,
   Layer,
   ManagedRuntime,
-  Schema,
   TestClock,
 } from "effect";
-import { parseJson } from "effect/Schema";
 import { makeDbLayer } from "./db.ts";
-import { EventBus, EventBusLive } from "./event-bus.ts";
-import { EventStore, EventStoreLive } from "./event-store.ts";
-import type { GuppyEvent } from "./schema.ts";
-import { GuppyEvent as GuppyEventSchema } from "./schema.ts";
+import { EventBus } from "./event-bus.ts";
+import { ScheduleStore } from "./event-store.ts";
+import type { BusEvent } from "./schema.ts";
 import { it } from "./test.ts";
 
 // -- Test subscriber (mimics production subscriber pattern) -------------------
 
 interface TestSubscriberService {
-  readonly received: Effect.Effect<ReadonlyArray<GuppyEvent>>;
+  readonly received: Effect.Effect<ReadonlyArray<BusEvent>>;
 }
 
 class TestSubscriber extends Context.Tag("TestSubscriber")<
@@ -32,7 +29,7 @@ const TestSubscriberLive = Layer.effect(
   TestSubscriber,
   Effect.gen(function* () {
     const bus = yield* EventBus;
-    const events: GuppyEvent[] = [];
+    const events: BusEvent[] = [];
 
     yield* bus.subscribe("test-subscriber", "agent.*", (e) =>
       Effect.sync(() => {
@@ -48,19 +45,14 @@ const TestSubscriberLive = Layer.effect(
 
 // -- Layers -------------------------------------------------------------------
 
-const agentMsg = (
-  target: string,
-  payload: string,
-  source?: string,
-): GuppyEvent => ({
+const agentMsg = (target: string, payload: string): BusEvent => ({
   type: "agent.message",
   targetThreadId: target,
-  sourceThreadId: source ?? null,
   payload,
 });
 
-const StoreLayer = Layer.provideMerge(EventStoreLive, makeDbLayer(":memory:"));
-const BusLayer = Layer.provideMerge(EventBusLive, StoreLayer);
+const StoreLayer = Layer.provideMerge(ScheduleStore.layer, makeDbLayer(":memory:"));
+const BusLayer = Layer.provideMerge(EventBus.layer, StoreLayer);
 const SubscribedLayer = Layer.provideMerge(TestSubscriberLive, BusLayer);
 
 // -- Tests with subscriber (production pattern) -------------------------------
@@ -71,29 +63,12 @@ it.layer(SubscribedLayer)("event-bus: subscriber", (it) => {
       const bus = yield* EventBus;
       const sub = yield* TestSubscriber;
 
-      const deliveries = yield* bus.emit(
-        agentMsg("thread-1", '{"msg":"hello"}'),
-      );
-
-      expect(deliveries).toHaveLength(1);
-      expect(deliveries[0]!.status).toBe("delivered");
-      expect(deliveries[0]!.subscriberId).toBe("test-subscriber");
+      yield* bus.emit(agentMsg("thread-1", "hello"));
 
       const received = yield* sub.received;
       expect(received).toHaveLength(1);
       expect(received[0]!.type).toBe("agent.message");
-    }),
-  );
-
-  it.effect("emit persists deliveries for auditability", () =>
-    Effect.gen(function* () {
-      const bus = yield* EventBus;
-
-      yield* bus.emit(agentMsg("audit", '{"action":"test"}'));
-      const deliveries = yield* bus.getDeliveries("test-subscriber");
-
-      expect(deliveries).toHaveLength(1);
-      expect(deliveries[0]!.status).toBe("delivered");
+      expect(received[0]!.payload).toBe("hello");
     }),
   );
 
@@ -106,10 +81,10 @@ it.layer(SubscribedLayer)("event-bus: subscriber", (it) => {
       const scheduledAt = DateTime.unsafeMakeZoned(now + 5000, {
         timeZone: "UTC",
       });
-      const schedule = yield* bus.schedule(
-        agentMsg("sched-1", '{"t":"later"}'),
-        { type: "delayed", scheduledAt },
-      );
+      const schedule = yield* bus.schedule(agentMsg("sched-1", "later"), {
+        type: "delayed",
+        scheduledAt,
+      });
 
       expect(schedule.scheduleType).toBe("delayed");
       expect(schedule.status).toBe("pending");
@@ -120,7 +95,7 @@ it.layer(SubscribedLayer)("event-bus: subscriber", (it) => {
 
       const received = yield* sub.received;
       expect(received).toHaveLength(1);
-      expect(received[0]!.payload).toBe('{"t":"later"}');
+      expect(received[0]!.payload).toBe("later");
     }),
   );
 
@@ -133,7 +108,7 @@ it.layer(SubscribedLayer)("event-bus: subscriber", (it) => {
       const scheduledAt = DateTime.unsafeMakeZoned(now + 10000, {
         timeZone: "UTC",
       });
-      yield* bus.schedule(agentMsg("sched-2", "{}"), {
+      yield* bus.schedule(agentMsg("sched-2", "wait"), {
         type: "delayed",
         scheduledAt,
       });
@@ -157,7 +132,7 @@ it.layer(SubscribedLayer)("event-bus: subscriber", (it) => {
       const scheduledAt = DateTime.unsafeMakeZoned(now + 5000, {
         timeZone: "UTC",
       });
-      const schedule = yield* bus.schedule(agentMsg("cancel-1", "{}"), {
+      const schedule = yield* bus.schedule(agentMsg("cancel-1", "nope"), {
         type: "delayed",
         scheduledAt,
       });
@@ -179,7 +154,7 @@ it.layer(SubscribedLayer)("event-bus: cron", (it) => {
       const bus = yield* EventBus;
       const sub = yield* TestSubscriber;
 
-      yield* bus.schedule(agentMsg("cron-1", '{"cron":true}'), {
+      yield* bus.schedule(agentMsg("cron-1", "tick"), {
         type: "cron",
         cronExpression: "* * * * *",
       });
@@ -191,7 +166,7 @@ it.layer(SubscribedLayer)("event-bus: cron", (it) => {
 
       const received = yield* sub.received;
       expect(received).toHaveLength(1);
-      expect(received[0]!.payload).toBe('{"cron":true}');
+      expect(received[0]!.payload).toBe("tick");
     }),
   );
 
@@ -200,7 +175,7 @@ it.layer(SubscribedLayer)("event-bus: cron", (it) => {
       const bus = yield* EventBus;
       const sub = yield* TestSubscriber;
 
-      yield* bus.schedule(agentMsg("cron-2", '{"repeat":true}'), {
+      yield* bus.schedule(agentMsg("cron-2", "repeat"), {
         type: "cron",
         cronExpression: "* * * * *",
       });
@@ -224,7 +199,7 @@ it.layer(SubscribedLayer)("event-bus: cron", (it) => {
       const bus = yield* EventBus;
       const sub = yield* TestSubscriber;
 
-      const schedule = yield* bus.schedule(agentMsg("cron-cancel", "{}"), {
+      const schedule = yield* bus.schedule(agentMsg("cron-cancel", "stop"), {
         type: "cron",
         cronExpression: "* * * * *",
       });
@@ -246,7 +221,7 @@ it.layer(SubscribedLayer)("event-bus: cron", (it) => {
       const bus = yield* EventBus;
 
       const result = yield* bus
-        .schedule(agentMsg("cron-bad", "{}"), {
+        .schedule(agentMsg("cron-bad", "nope"), {
           type: "cron",
           cronExpression: "not a cron",
         })
@@ -260,19 +235,19 @@ it.layer(SubscribedLayer)("event-bus: cron", (it) => {
 // -- Tests with manual setup (edge cases) -------------------------------------
 
 it.layer(BusLayer)("event-bus: edge cases", (it) => {
-  it.effect("emit with no matching subscriber returns empty", () =>
+  it.effect("emit with no matching subscriber is a no-op", () =>
     Effect.gen(function* () {
       const bus = yield* EventBus;
-      const deliveries = yield* bus.emit(agentMsg("no-one", "{}"));
-      expect(deliveries).toHaveLength(0);
+      // Should not throw
+      yield* bus.emit(agentMsg("no-one", "hello"));
     }),
   );
 
   it.effect("emit delivers to multiple matching subscribers", () =>
     Effect.gen(function* () {
       const bus = yield* EventBus;
-      const received1: GuppyEvent[] = [];
-      const received2: GuppyEvent[] = [];
+      const received1: BusEvent[] = [];
+      const received2: BusEvent[] = [];
 
       yield* bus.subscribe("sub-a", "agent.message", (e) =>
         Effect.sync(() => {
@@ -285,9 +260,8 @@ it.layer(BusLayer)("event-bus: edge cases", (it) => {
         }),
       );
 
-      const deliveries = yield* bus.emit(agentMsg("thread-1", "{}"));
+      yield* bus.emit(agentMsg("thread-1", "multi"));
 
-      expect(deliveries).toHaveLength(2);
       expect(received1).toHaveLength(1);
       expect(received2).toHaveLength(1);
     }),
@@ -296,7 +270,7 @@ it.layer(BusLayer)("event-bus: edge cases", (it) => {
   it.effect("glob pattern filters non-matching events", () =>
     Effect.gen(function* () {
       const bus = yield* EventBus;
-      const received: GuppyEvent[] = [];
+      const received: BusEvent[] = [];
 
       yield* bus.subscribe("narrow-sub", "thread.*", (e) =>
         Effect.sync(() => {
@@ -304,72 +278,33 @@ it.layer(BusLayer)("event-bus: edge cases", (it) => {
         }),
       );
 
-      yield* bus.emit(agentMsg("thread-1", "{}"));
+      yield* bus.emit(agentMsg("thread-1", "miss"));
       expect(received).toHaveLength(0);
     }),
   );
 
-  it.effect("emit retries then dead-letters on repeated failure", () =>
+  it.effect("handler errors are ignored (do not propagate)", () =>
     Effect.gen(function* () {
       const bus = yield* EventBus;
-      let attempts = 0;
+      const received: BusEvent[] = [];
 
-      yield* bus.subscribe("flaky-sub", "agent.*", () =>
-        Effect.gen(function* () {
-          attempts++;
-          yield* Effect.fail("boom");
+      yield* bus.subscribe("bad-sub", "agent.*", () => Effect.fail("boom"));
+      yield* bus.subscribe("good-sub", "agent.*", (e) =>
+        Effect.sync(() => {
+          received.push(e);
         }),
       );
 
-      const deliveries = yield* bus.emit(agentMsg("flaky", "{}"));
-
-      expect(deliveries).toHaveLength(1);
-      expect(deliveries[0]!.status).toBe("dead_letter");
-      expect(deliveries[0]!.retryCount).toBe(3);
-      expect(deliveries[0]!.lastError).toBe("boom");
-      expect(attempts).toBe(3);
-    }),
-  );
-
-  it.effect("per-subscriber dead letter independence", () =>
-    Effect.gen(function* () {
-      const bus = yield* EventBus;
-
-      yield* bus.subscribe("good-sub", "agent.*", () => Effect.void);
-      yield* bus.subscribe("bad-sub", "agent.*", () => Effect.fail("nope"));
-
-      const deliveries = yield* bus.emit(agentMsg("thread-1", "{}"));
-
-      expect(deliveries).toHaveLength(2);
-      const good = deliveries.find((d) => d.subscriberId === "good-sub")!;
-      const bad = deliveries.find((d) => d.subscriberId === "bad-sub")!;
-      expect(good.status).toBe("delivered");
-      expect(bad.status).toBe("dead_letter");
-    }),
-  );
-
-  it.effect("replayDeadLetter retries a failed delivery", () =>
-    Effect.gen(function* () {
-      const bus = yield* EventBus;
-      let shouldFail = true;
-
-      yield* bus.subscribe("retry-sub", "agent.*", () =>
-        shouldFail ? Effect.fail("not yet") : Effect.void,
-      );
-
-      const deliveries = yield* bus.emit(agentMsg("retry-target", "{}"));
-      expect(deliveries[0]!.status).toBe("dead_letter");
-
-      shouldFail = false;
-      const replayed = yield* bus.replayDeadLetter(deliveries[0]!.id);
-      expect(replayed.status).toBe("delivered");
+      // Should not throw despite bad-sub failing
+      yield* bus.emit(agentMsg("thread-1", "ok"));
+      expect(received).toHaveLength(1);
     }),
   );
 
   it.effect("unsubscribe stops delivery", () =>
     Effect.gen(function* () {
       const bus = yield* EventBus;
-      const received: GuppyEvent[] = [];
+      const received: BusEvent[] = [];
 
       yield* bus.subscribe("unsub-test", "agent.*", (e) =>
         Effect.sync(() => {
@@ -377,11 +312,11 @@ it.layer(BusLayer)("event-bus: edge cases", (it) => {
         }),
       );
 
-      yield* bus.emit(agentMsg("thread-1", "{}"));
+      yield* bus.emit(agentMsg("thread-1", "first"));
       expect(received).toHaveLength(1);
 
       yield* bus.unsubscribe("unsub-test");
-      yield* bus.emit(agentMsg("thread-1", "{}"));
+      yield* bus.emit(agentMsg("thread-1", "second"));
       expect(received).toHaveLength(1);
     }),
   );
@@ -391,8 +326,8 @@ it.layer(BusLayer)("event-bus: edge cases", (it) => {
 
 const makeAppLayer = (dbPath: string) => {
   const db = makeDbLayer(dbPath);
-  const storeLayer = Layer.provideMerge(EventStoreLive, db);
-  return Layer.provideMerge(EventBusLive, storeLayer);
+  const storeLayer = Layer.provideMerge(ScheduleStore.layer, db);
+  return Layer.provideMerge(EventBus.layer, storeLayer);
 };
 
 test("recovery: scheduled event survives restart", async () => {
@@ -403,12 +338,10 @@ test("recovery: scheduled event survives restart", async () => {
   const rt1 = ManagedRuntime.make(appLayer);
   await rt1.runPromise(
     Effect.gen(function* () {
-      const store = yield* EventStore;
+      const store = yield* ScheduleStore;
       yield* store.insertSchedule({
         eventType: "agent.message",
-        eventData: Schema.encodeSync(parseJson(GuppyEventSchema))(
-          agentMsg("persist-thread", '{"survived":true}'),
-        ),
+        eventData: JSON.stringify(agentMsg("persist-thread", "survived")),
         scheduleType: "delayed",
         scheduledAt: Date.now() + 100,
         cronExpression: null,
@@ -428,7 +361,7 @@ test("recovery: scheduled event survives restart", async () => {
 
       const received = yield* sub.received;
       expect(received).toHaveLength(1);
-      expect(received[0]!.payload).toBe('{"survived":true}');
+      expect(received[0]!.payload).toBe("survived");
     }),
   );
   await rt2.dispose();
@@ -445,12 +378,10 @@ test("recovery: overdue event fires immediately on restart", async () => {
   const rt1 = ManagedRuntime.make(appLayer);
   await rt1.runPromise(
     Effect.gen(function* () {
-      const store = yield* EventStore;
+      const store = yield* ScheduleStore;
       yield* store.insertSchedule({
         eventType: "agent.message",
-        eventData: Schema.encodeSync(parseJson(GuppyEventSchema))(
-          agentMsg("overdue-thread", '{"overdue":true}'),
-        ),
+        eventData: JSON.stringify(agentMsg("overdue-thread", "overdue")),
         scheduleType: "delayed",
         scheduledAt: Date.now() - 5000,
         cronExpression: null,
@@ -470,7 +401,7 @@ test("recovery: overdue event fires immediately on restart", async () => {
 
       const received = yield* sub.received;
       expect(received).toHaveLength(1);
-      expect(received[0]!.payload).toBe('{"overdue":true}');
+      expect(received[0]!.payload).toBe("overdue");
     }),
   );
   await rt2.dispose();

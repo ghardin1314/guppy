@@ -1,17 +1,20 @@
+import {
+  EchoAgentFactoryLive,
+  it,
+  makeDbLayer,
+  Orchestrator,
+  testConfig,
+  ThreadId,
+  ThreadStore,
+  TransportRegistry,
+} from "@guppy/core";
 import { expect } from "bun:test";
 import { Effect, Layer } from "effect";
 import {
-  makeDbLayer,
-  ThreadStoreLive,
-  Orchestrator,
-  TransportRegistryLive,
-  TransportMap,
-  EchoAgentFactoryLive,
-  testConfig,
-  ThreadId,
-} from "@guppy/core";
-import { SseTransport, SseTransportLive, type SseEventMessage } from "./sse-transport.ts";
-import { it } from "@guppy/core";
+  SseTransport,
+  SseTransportLive,
+  type SseEventMessage,
+} from "./sse-transport.ts";
 
 const tid = ThreadId.make;
 
@@ -28,32 +31,18 @@ function mockListener() {
 // -- Layers -------------------------------------------------------------------
 
 const DbLayer = makeDbLayer(":memory:");
-const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
-const RegistryLayer = TransportRegistryLive;
-const TransportMapLayer = Layer.provide(
-  TransportMap.DefaultWithoutDependencies,
-  RegistryLayer,
-);
-const OrchestratorLayer = Layer.provide(
+
+const CoreLayer = Layer.mergeAll(
+  ThreadStore.layer,
   Orchestrator.layer(testConfig),
-  Layer.mergeAll(StoreLayer, EchoAgentFactoryLive, TransportMapLayer),
-);
+  TransportRegistry.layer,
+).pipe(Layer.provide(EchoAgentFactoryLive), Layer.provideMerge(DbLayer));
 
-const SseLayer = Layer.provide(
-  SseTransportLive,
-  Layer.mergeAll(StoreLayer, RegistryLayer, OrchestratorLayer),
-);
-
-const TestLayer = Layer.mergeAll(
-  StoreLayer,
-  EchoAgentFactoryLive,
-  OrchestratorLayer,
-  SseLayer,
-);
+const SseLayer = Layer.provide(SseTransportLive, CoreLayer);
 
 // -- Tests --------------------------------------------------------------------
 
-it.layer(TestLayer)("SseTransport", (it) => {
+it.layer(SseLayer)("SseTransport", (it) => {
   it.live("addListener registers and removeListener cleans up", () =>
     Effect.gen(function* () {
       const sse = yield* SseTransport;

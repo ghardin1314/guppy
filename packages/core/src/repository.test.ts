@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { Effect, Layer } from "effect";
 import { makeDbLayer } from "./db.ts";
-import { ThreadStore, ThreadStoreLive } from "./repository.ts";
+import { ThreadStore } from "./repository.ts";
 import { it } from "./test.ts";
 import { TransportId, ThreadId } from "./schema.ts";
 
@@ -29,7 +29,7 @@ const assistantMsg = (text: string): AgentMessage => ({
   timestamp: Date.now(),
 } as AgentMessage);
 
-const TestLayer = Layer.provideMerge(ThreadStoreLive, makeDbLayer(":memory:"));
+const TestLayer = Layer.provideMerge(ThreadStore.layer, makeDbLayer(":memory:"));
 
 it.layer(TestLayer)("repository", (it) => {
   // -- threads ----------------------------------------------------------------

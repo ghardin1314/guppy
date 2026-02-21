@@ -8,12 +8,9 @@
  */
 
 import { Effect, Layer, LayerMap } from "effect";
-import { TransportService } from "./transport.ts";
-import {
-  TransportRegistry,
-  TransportRegistryLive,
-} from "./transport-registry.ts";
 import type { TransportId } from "./schema.ts";
+import { TransportRegistry } from "./transport-registry.ts";
+import { TransportService } from "./transport.ts";
 
 // -- Service ------------------------------------------------------------------
 
@@ -28,6 +25,6 @@ export class TransportMap extends LayerMap.Service<TransportMap>()(
           return yield* registry.lookup(name);
         }),
       ),
-    dependencies: [TransportRegistryLive],
+    dependencies: [TransportRegistry.layer],
   },
 ) {}

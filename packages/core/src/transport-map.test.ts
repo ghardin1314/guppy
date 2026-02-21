@@ -4,7 +4,6 @@ import { it } from "./testing.ts";
 import { TransportService, type Transport } from "./transport.ts";
 import {
   TransportRegistry,
-  TransportRegistryLive,
   TransportNotFoundError,
 } from "./transport-registry.ts";
 import { TransportMap } from "./transport-map.ts";
@@ -12,7 +11,7 @@ import { TransportId, ThreadId } from "./schema.ts";
 
 // -- Layers -------------------------------------------------------------------
 
-const RegistryLayer = TransportRegistryLive;
+const RegistryLayer = TransportRegistry.layer;
 const TransportMapLayer = Layer.provide(
   TransportMap.DefaultWithoutDependencies,
   RegistryLayer,

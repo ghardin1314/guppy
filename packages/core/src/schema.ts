@@ -51,18 +51,11 @@ export type AgentResponseEvent = Schema.Schema.Type<typeof AgentResponseEvent>;
 
 // -- Events -------------------------------------------------------------------
 
-
-
-export const AgentMessageEvent = Schema.Struct({
-  type: Schema.Literal("agent.message"),
-  targetThreadId: Schema.String,
-  sourceThreadId: Schema.NullOr(Schema.String),
-  payload: Schema.String,
-});
-export type AgentMessageEvent = Schema.Schema.Type<typeof AgentMessageEvent>;
-
-export const GuppyEvent = Schema.Union(AgentMessageEvent);
-export type GuppyEvent = Schema.Schema.Type<typeof GuppyEvent>;
+/** Any JSON-serializable object with a `type` field for pattern matching. */
+export interface BusEvent {
+  readonly type: string;
+  readonly [key: string]: unknown;
+}
 
 // -- Schedule Timing ----------------------------------------------------------
 
@@ -108,27 +101,3 @@ export const EventSchedule = Schema.Struct({
 });
 export type EventSchedule = Schema.Schema.Type<typeof EventSchedule>;
 
-// -- Event Delivery (persistence) ---------------------------------------------
-
-export const DeliveryStatus = Schema.Literal(
-  "pending",
-  "delivered",
-  "failed",
-  "dead_letter",
-);
-export type DeliveryStatus = Schema.Schema.Type<typeof DeliveryStatus>;
-
-export const EventDelivery = Schema.Struct({
-  id: Schema.String,
-  scheduleId: Schema.NullOr(Schema.String),
-  subscriberId: Schema.String,
-  eventType: Schema.String,
-  eventData: Schema.String,
-  status: DeliveryStatus,
-  retryCount: Schema.Number,
-  maxRetries: Schema.Number,
-  lastError: Schema.NullOr(Schema.String),
-  createdAt: Schema.Number,
-  deliveredAt: Schema.NullOr(Schema.Number),
-});
-export type EventDelivery = Schema.Schema.Type<typeof EventDelivery>;

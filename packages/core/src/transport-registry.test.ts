@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import { it } from "./testing.ts";
 import {
   TransportRegistry,
-  TransportRegistryLive,
   TransportNotFoundError,
 } from "./transport-registry.ts";
 import type { Transport } from "./transport.ts";
@@ -18,7 +17,7 @@ const dummyTransport = (label: string): Transport => ({
 
 // -- Tests --------------------------------------------------------------------
 
-it.layer(TransportRegistryLive)("transport-registry", (it) => {
+it.layer(TransportRegistry.layer)("transport-registry", (it) => {
   it.live("lookup unknown name fails with TransportNotFoundError", () =>
     Effect.gen(function* () {
       const registry = yield* TransportRegistry;

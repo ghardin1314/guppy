@@ -10,16 +10,13 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import type { AgentThreadConfig } from "./agent-thread.ts";
 import { AgentFactory, PiAgentFactoryLive } from "./agent.ts";
 import { makeDbLayer } from "./db.ts";
-import { EventBus, EventBusLive } from "./event-bus.ts";
-import { EventStore, EventStoreLive } from "./event-store.ts";
+import { EventBus } from "./event-bus.ts";
+import { ScheduleStore } from "./event-store.ts";
 import { Orchestrator } from "./orchestrator.ts";
-import { ThreadStore, ThreadStoreLive } from "./repository.ts";
-import type { EventSchedule, GuppyEvent, ScheduleTiming } from "./schema.ts";
+import { ThreadStore } from "./repository.ts";
+import type { BusEvent, EventSchedule, ScheduleTiming } from "./schema.ts";
 import { TransportMap } from "./transport-map.ts";
-import {
-  TransportRegistry,
-  TransportRegistryLive,
-} from "./transport-registry.ts";
+import { TransportRegistry } from "./transport-registry.ts";
 
 // -- Config -------------------------------------------------------------------
 
@@ -35,7 +32,7 @@ export interface GuppyConfig {
 export type CoreServices =
   | Orchestrator
   | EventBus
-  | EventStore
+  | ScheduleStore
   | ThreadStore
   | TransportRegistry
   | TransportMap
@@ -51,32 +48,14 @@ function makeCoreLive(
   const dbPath = config.db ?? `${config.projectDir}/.guppy/guppy.db`;
   const DbLayer = makeDbLayer(dbPath);
 
-  const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
-  const EventStoreLayer = Layer.provideMerge(EventStoreLive, DbLayer);
-
-  const RegistryLayer = TransportRegistryLive;
-  const TransportMapLayer = Layer.provide(
-    TransportMap.DefaultWithoutDependencies,
-    RegistryLayer,
-  );
-
-  const OrchestratorLayer = Layer.provide(
-    Orchestrator.layer(config.agent),
-    Layer.mergeAll(StoreLayer, agentFactoryLayer, TransportMapLayer),
-  );
-
-  const EventBusLayer = Layer.provide(EventBusLive, EventStoreLayer);
-
   return Layer.mergeAll(
-    DbLayer,
-    StoreLayer,
-    EventStoreLayer,
-    RegistryLayer,
-    TransportMapLayer,
-    agentFactoryLayer,
-    OrchestratorLayer,
-    EventBusLayer,
-  );
+    Orchestrator.layer(config.agent),
+    EventBus.layer,
+    ScheduleStore.layer,
+    ThreadStore.layer,
+    TransportRegistry.layer,
+    TransportMap.Default,
+  ).pipe(Layer.provideMerge(agentFactoryLayer), Layer.provideMerge(DbLayer));
 }
 
 // -- Guppy class --------------------------------------------------------------
@@ -157,7 +136,7 @@ export class Guppy<Extra = never> {
     await this.runtime.runPromise(Effect.void);
   }
 
-  emit(event: GuppyEvent): void {
+  emit(event: BusEvent): void {
     if (!this.runtime) throw new Error("Guppy not booted");
     this.runtime.runFork(
       Effect.gen(function* () {
@@ -168,7 +147,7 @@ export class Guppy<Extra = never> {
   }
 
   async schedule(
-    event: GuppyEvent,
+    event: BusEvent,
     timing: ScheduleTiming,
   ): Promise<EventSchedule> {
     if (!this.runtime) throw new Error("Guppy not booted");

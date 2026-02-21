@@ -7,8 +7,8 @@
  */
 
 import { Context, Effect, HashMap, Layer, Ref, Schema } from "effect";
-import type { Transport } from "./transport.ts";
 import type { TransportId } from "./schema.ts";
+import type { Transport } from "./transport.ts";
 
 // -- Service interface --------------------------------------------------------
 
@@ -26,7 +26,29 @@ export interface TransportRegistryService {
 
 export class TransportRegistry extends Context.Tag(
   "@guppy/core/TransportRegistry",
-)<TransportRegistry, TransportRegistryService>() {}
+)<TransportRegistry, TransportRegistryService>() {
+  static layer = Layer.effect(
+    TransportRegistry,
+    Effect.gen(function* () {
+      const ref = yield* Ref.make(HashMap.empty<TransportId, Transport>());
+
+      return TransportRegistry.of({
+        register: (name, transport) =>
+          Ref.update(ref, HashMap.set(name, transport)),
+
+        lookup: (name) =>
+          Effect.gen(function* () {
+            const map = yield* Ref.get(ref);
+            const t = HashMap.get(map, name);
+            if (t._tag === "None") {
+              return yield* new TransportNotFoundError({ name });
+            }
+            return t.value;
+          }),
+      });
+    }),
+  );
+}
 
 // -- Errors -------------------------------------------------------------------
 
@@ -36,25 +58,3 @@ export class TransportNotFoundError extends Schema.TaggedError<TransportNotFound
 ) {}
 
 // -- Live implementation ------------------------------------------------------
-
-export const TransportRegistryLive = Layer.effect(
-  TransportRegistry,
-  Effect.gen(function* () {
-    const ref = yield* Ref.make(HashMap.empty<TransportId, Transport>());
-
-    return TransportRegistry.of({
-      register: (name, transport) =>
-        Ref.update(ref, HashMap.set(name, transport)),
-
-      lookup: (name) =>
-        Effect.gen(function* () {
-          const map = yield* Ref.get(ref);
-          const t = HashMap.get(map, name);
-          if (t._tag === "None") {
-            return yield* new TransportNotFoundError({ name });
-          }
-          return t.value;
-        }),
-    });
-  }),
-);

@@ -5,7 +5,7 @@ import { EchoAgentFactoryLive, testConfig } from "./testing.ts";
 import { EventBus } from "./event-bus.ts";
 import { TransportRegistry } from "./transport-registry.ts";
 import { TransportId } from "./schema.ts";
-import type { GuppyEvent } from "./schema.ts";
+import type { BusEvent } from "./schema.ts";
 
 function createTestGuppy() {
   return Guppy._createWithFactory(
@@ -31,7 +31,7 @@ describe("Guppy", () => {
     guppy = createTestGuppy();
     await guppy.boot();
 
-    const delivered: GuppyEvent[] = [];
+    const delivered: BusEvent[] = [];
 
     // Subscribe via runEffect
     await guppy.runEffect(
@@ -45,10 +45,9 @@ describe("Guppy", () => {
       }),
     );
 
-    const event: GuppyEvent = {
+    const event: BusEvent = {
       type: "agent.message",
       targetThreadId: "t1",
-      sourceThreadId: null,
       payload: "hello",
     };
 
@@ -65,10 +64,9 @@ describe("Guppy", () => {
     guppy = createTestGuppy();
     await guppy.boot();
 
-    const event: GuppyEvent = {
+    const event: BusEvent = {
       type: "agent.message",
       targetThreadId: "t1",
-      sourceThreadId: null,
       payload: "scheduled",
     };
 
@@ -109,7 +107,6 @@ describe("Guppy", () => {
       guppy.emit({
         type: "agent.message",
         targetThreadId: "t1",
-        sourceThreadId: null,
         payload: "hello",
       }),
     ).toThrow("Guppy not booted");

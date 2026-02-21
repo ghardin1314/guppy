@@ -1,20 +1,16 @@
 import {
   EventBus,
-  EventBusLive,
-  EventStore,
-  EventStoreLive,
+  ScheduleStore,
   makeDbLayer,
   Orchestrator,
   PiAgentFactoryLive,
   ThreadStore,
-  ThreadStoreLive,
   TransportId,
   ThreadId,
   TransportMap,
-  TransportRegistryLive,
+  TransportRegistry,
   createBaseTools,
   type AgentThreadConfig,
-  type GuppyEvent,
 } from "@guppy/core";
 import { getModel } from "@mariozechner/pi-ai";
 import { DateTime, Effect, Layer } from "effect";
@@ -46,11 +42,11 @@ const agentConfig: AgentThreadConfig = {
 // -- Layers -------------------------------------------------------------------
 
 const DbLayer = makeDbLayer(DB_PATH);
-const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
-const EventStoreLayer = Layer.provideMerge(EventStoreLive, DbLayer);
-const BusLayer = Layer.provideMerge(EventBusLive, EventStoreLayer);
+const StoreLayer = Layer.provideMerge(ThreadStore.layer, DbLayer);
+const ScheduleStoreLayer = Layer.provideMerge(ScheduleStore.layer, DbLayer);
+const BusLayer = Layer.provideMerge(EventBus.layer, ScheduleStoreLayer);
 
-const RegistryLayer = TransportRegistryLive;
+const RegistryLayer = TransportRegistry.layer;
 
 const TransportMapLayer = Layer.provide(
   TransportMap.DefaultWithoutDependencies,
@@ -59,7 +55,7 @@ const TransportMapLayer = Layer.provide(
 
 const OrchestratorLayer = Layer.provide(
   Orchestrator.layer(agentConfig),
-  Layer.mergeAll(StoreLayer, PiAgentFactoryLive, TransportMapLayer),
+  Layer.mergeAll(StoreLayer, PiAgentFactoryLive, TransportMapLayer, BusLayer),
 );
 
 const TerminalLayer = Layer.provide(
@@ -117,33 +113,11 @@ const waitWithSteering = (threadId: ThreadId) =>
 
 // -- Main ---------------------------------------------------------------------
 
-const makeEvent = (
-  threadId: string,
-  payload: string,
-): GuppyEvent => ({
-  type: "agent.message",
-  targetThreadId: threadId,
-  sourceThreadId: null,
-  payload,
-});
-
 const main = Effect.gen(function* () {
   const store = yield* ThreadStore;
   const t = yield* TerminalTransport;
-  const bus = yield* EventBus;
-  const eventStore = yield* EventStore;
-
-  // Deliver scheduled events as agent prompts
-  yield* bus.subscribe("terminal-scheduler", "agent.*", (event) =>
-    Effect.gen(function* () {
-      console.log(`\n[scheduled] delivering: ${event.payload}`);
-      yield* t.prompt(ThreadId.make(event.targetThreadId), event.payload);
-    }).pipe(
-      Effect.catchAll((e) =>
-        Effect.sync(() => console.error("[schedule error]", e)),
-      ),
-    ),
-  );
+  const orch = yield* Orchestrator;
+  const scheduleStore = yield* ScheduleStore;
 
   let threadId = ThreadId.make("default");
   let thread = yield* store.getOrCreateThread(TERMINAL, threadId);
@@ -247,8 +221,8 @@ const main = Effect.gen(function* () {
           const scheduledAt = DateTime.unsafeMakeZoned(Date.now() + ms, {
             timeZone: "UTC",
           });
-          const sched = yield* bus
-            .schedule(makeEvent(threadId, message), {
+          const sched = yield* orch
+            .scheduleMessage(TERMINAL, threadId, message, {
               type: "delayed",
               scheduledAt,
             })
@@ -280,8 +254,8 @@ const main = Effect.gen(function* () {
             console.log("Missing message after cron expression");
             break;
           }
-          const sched = yield* bus
-            .schedule(makeEvent(threadId, message), {
+          const sched = yield* orch
+            .scheduleMessage(TERMINAL, threadId, message, {
               type: "cron",
               cronExpression: cronExpr,
             })
@@ -302,8 +276,8 @@ const main = Effect.gen(function* () {
         }
 
         case "/schedules": {
-          const delayed = yield* eventStore.getPendingSchedules("delayed");
-          const crons = yield* eventStore.getPendingSchedules("cron");
+          const delayed = yield* scheduleStore.getPendingSchedules("delayed");
+          const crons = yield* scheduleStore.getPendingSchedules("cron");
           if (delayed.length === 0 && crons.length === 0) {
             console.log("No active schedules.");
             break;
@@ -329,15 +303,15 @@ const main = Effect.gen(function* () {
             break;
           }
           const all = [
-            ...(yield* eventStore.getPendingSchedules("delayed")),
-            ...(yield* eventStore.getPendingSchedules("cron")),
+            ...(yield* scheduleStore.getPendingSchedules("delayed")),
+            ...(yield* scheduleStore.getPendingSchedules("cron")),
           ];
           const match = all.find((s) => s.id.startsWith(prefix));
           if (!match) {
             console.log(`No schedule matching '${prefix}'`);
             break;
           }
-          yield* bus.cancel(match.id);
+          yield* orch.cancelSchedule(match.id);
           console.log(`Canceled ${match.id.slice(0, 8)}`);
           break;
         }

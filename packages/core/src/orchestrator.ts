@@ -25,11 +25,17 @@ import {
   type AgentThreadHandle,
 } from "./agent-thread.ts";
 import { AgentError, AgentFactory } from "./agent.ts";
+import { EventBus, type EventBusService } from "./event-bus.ts";
 import { ThreadStore } from "./repository.ts";
+import type {
+  EventSchedule,
+  ScheduleTiming,
+  ThreadId,
+  TransportId,
+} from "./schema.ts";
 import { ThreadMessage } from "./thread-message.ts";
 import { TransportMap } from "./transport-map.ts";
 import { TransportNotFoundError } from "./transport-registry.ts";
-import type { TransportId, ThreadId } from "./schema.ts";
 
 // -- Errors -------------------------------------------------------------------
 const OrchestratorErrorReason = Schema.Literal("STORAGE_ERROR");
@@ -51,6 +57,14 @@ export type OrchestratorSendError =
   | AgentError
   | TransportNotFoundError;
 
+export type OrchestratorScheduleError =
+  ReturnType<EventBusService["schedule"]> extends Effect.Effect<
+    infer _A,
+    infer E
+  >
+    ? E
+    : never;
+
 export interface OrchestratorService {
   /** Send to a virtual agent thread. Creates thread if needed, spawns if not running. */
   readonly send: (
@@ -64,6 +78,19 @@ export interface OrchestratorService {
     transport: TransportId,
     threadId: ThreadId,
   ) => Effect.Effect<Stream.Stream<AgentEvent> | null, OrchestratorError>;
+
+  /** Schedule a message for future delivery to an agent thread. */
+  readonly scheduleMessage: (
+    transport: TransportId,
+    threadId: ThreadId,
+    content: string,
+    timing: ScheduleTiming,
+  ) => Effect.Effect<EventSchedule, OrchestratorScheduleError>;
+
+  /** Cancel a previously scheduled message. */
+  readonly cancelSchedule: (
+    scheduleId: string,
+  ) => Effect.Effect<void, OrchestratorScheduleError>;
 }
 
 // -- Tag ----------------------------------------------------------------------
@@ -72,18 +99,13 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
   Orchestrator,
   OrchestratorService
 >() {
-  static layer = (
-    config: AgentThreadConfig,
-  ): Layer.Layer<
-    Orchestrator,
-    never,
-    AgentFactory | ThreadStore | TransportMap
-  > =>
+  static layer = (config: AgentThreadConfig) =>
     Layer.scoped(
       Orchestrator,
       Effect.gen(function* () {
         const store = yield* ThreadStore;
         const transportMap = yield* TransportMap;
+        const bus = yield* EventBus;
         const scope = yield* Effect.scope;
         const spawnCtx = yield* Effect.context<AgentFactory | ThreadStore>();
 
@@ -128,23 +150,38 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
             ),
           );
 
-        return Orchestrator.of({
-          send: (transport, threadId, msg) =>
-            Effect.gen(function* () {
-              yield* store.getOrCreateThread(transport, threadId);
-              const handle = yield* getOrSpawn(threadId, transport);
-              yield* handle.send(msg);
-            }).pipe(
-              Effect.catchTag(
-                "SqlError",
-                (e) =>
-                  new OrchestratorError({
-                    message: "Failed to send message",
-                    reason: "STORAGE_ERROR",
-                    cause: e,
-                  }),
-              ),
+        const send = (
+          transport: TransportId,
+          threadId: ThreadId,
+          msg: ThreadMessage,
+        ) =>
+          Effect.gen(function* () {
+            yield* store.getOrCreateThread(transport, threadId);
+            const handle = yield* getOrSpawn(threadId, transport);
+            yield* handle.send(msg);
+          }).pipe(
+            Effect.catchTag(
+              "SqlError",
+              (e) =>
+                new OrchestratorError({
+                  message: "Failed to send message",
+                  reason: "STORAGE_ERROR",
+                  cause: e,
+                }),
             ),
+          );
+
+        // Subscribe to agent.message events and route through send
+        yield* bus.subscribe("orchestrator", "agent.message", (event) =>
+          send(
+            event.transport as TransportId,
+            event.threadId as ThreadId,
+            ThreadMessage.Prompt({ content: event.content as string }),
+          ),
+        );
+
+        return Orchestrator.of({
+          send,
 
           events: (transport, threadId) =>
             Effect.gen(function* () {
@@ -163,7 +200,24 @@ export class Orchestrator extends Context.Tag("@guppy/core/Orchestrator")<
                   }),
               ),
             ),
+
+          scheduleMessage: (transport, threadId, content, timing) =>
+            bus.schedule(
+              {
+                type: "agent.message",
+                transport,
+                threadId,
+                content,
+              },
+              timing,
+            ),
+
+          cancelSchedule: (scheduleId) => bus.cancel(scheduleId),
         });
       }),
+    ).pipe(
+      Layer.provide(EventBus.layer),
+      Layer.provide(ThreadStore.layer),
+      Layer.provide(TransportMap.Default),
     );
 }

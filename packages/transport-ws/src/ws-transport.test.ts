@@ -1,21 +1,20 @@
-import { expect } from "bun:test";
-import { Effect, Layer } from "effect";
 import {
-  makeDbLayer,
-  ThreadStoreLive,
-  Orchestrator,
-  TransportRegistryLive,
-  TransportMap,
   EchoAgentFactoryLive,
+  it,
+  makeDbLayer,
+  Orchestrator,
   testConfig,
   ThreadId,
+  ThreadStore,
+  TransportRegistry,
 } from "@guppy/core";
+import { expect } from "bun:test";
+import { Effect, Layer } from "effect";
 import {
   WebsocketTransport,
   WebsocketTransportLive,
   type ServerMessage,
 } from "./ws-transport.ts";
-import { it } from "@guppy/core";
 
 const tid = ThreadId.make;
 
@@ -34,32 +33,18 @@ function mockClient() {
 // -- Layers -------------------------------------------------------------------
 
 const DbLayer = makeDbLayer(":memory:");
-const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
-const RegistryLayer = TransportRegistryLive;
-const TransportMapLayer = Layer.provide(
-  TransportMap.DefaultWithoutDependencies,
-  RegistryLayer,
-);
-const OrchestratorLayer = Layer.provide(
+
+const CoreLayer = Layer.mergeAll(
+  ThreadStore.layer,
   Orchestrator.layer(testConfig),
-  Layer.mergeAll(StoreLayer, EchoAgentFactoryLive, TransportMapLayer),
-);
+  TransportRegistry.layer,
+).pipe(Layer.provide(EchoAgentFactoryLive), Layer.provideMerge(DbLayer));
 
-const WsLayer = Layer.provide(
-  WebsocketTransportLive,
-  Layer.mergeAll(StoreLayer, RegistryLayer, OrchestratorLayer),
-);
-
-const TestLayer = Layer.mergeAll(
-  StoreLayer,
-  EchoAgentFactoryLive,
-  OrchestratorLayer,
-  WsLayer,
-);
+const WsLayer = Layer.provide(WebsocketTransportLive, CoreLayer);
 
 // -- Tests --------------------------------------------------------------------
 
-it.layer(TestLayer)("WebsocketTransport", (it) => {
+it.layer(WsLayer)("WebsocketTransport", (it) => {
   it.live("connect sends connected message", () =>
     Effect.gen(function* () {
       const ws = yield* WebsocketTransport;

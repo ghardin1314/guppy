@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import { Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { makeDbLayer } from "./db.ts";
-import { ThreadStore, ThreadStoreLive } from "./repository.ts";
+import { ThreadStore } from "./repository.ts";
 import { spawn } from "./agent-thread.ts";
 import { ThreadMessage } from "./thread-message.ts";
 import {
@@ -18,7 +18,7 @@ import { TransportId, ThreadId } from  "./schema.ts";
 // -- Layers -------------------------------------------------------------------
 
 const DbLayer = makeDbLayer(":memory:");
-const StoreLayer = Layer.provideMerge(ThreadStoreLive, DbLayer);
+const StoreLayer = Layer.provideMerge(ThreadStore.layer, DbLayer);
 const { state: transportState, layer: TransportLayer } = makeTestTransport();
 const TestLayer = Layer.mergeAll(StoreLayer, EchoAgentFactoryLive, TransportLayer);
 
