@@ -5,7 +5,7 @@
 | Repo / Doc | Path | Description |
 |---|---|---|
 | [badlogic/pi-mono](https://github.com/badlogic/pi-mono) | `.context/pi-mono/` | Mom bot + pi-agent-core |
-| [vercel/chat](https://github.com/vercel/chat) | `.context/` (root) | Chat SDK — adapters, state, types |
+| [vercel/chat](https://github.com/vercel/chat) | `.context/chat/` | Chat SDK — adapters, state, types |
 | @guppy/core design | `docs/core-design.md` | Detailed design: orchestrator, actors, agent runner, context, tools |
 | @guppy/cli design | `docs/cli-design.md` | CLI design: create, add transport, restart, transport registry |
 | System prompt design | `docs/system-prompt-design.md` | System prompt template, memory hierarchy, config schema |
