@@ -9,6 +9,7 @@
 | @guppy/core design | `docs/core-design.md` | Detailed design: orchestrator, actors, agent runner, context, tools |
 | @guppy/cli design | `docs/cli-design.md` | CLI design: create, add transport, restart, transport registry |
 | System prompt design | `docs/system-prompt-design.md` | System prompt template, memory hierarchy, config schema |
+| Fault tolerance | `docs/fault-tolerance.md` | Atomic writes, retry strategy, error handling, reboot safety |
 
 ---
 
