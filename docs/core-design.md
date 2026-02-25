@@ -387,29 +387,13 @@ When context grows beyond a threshold:
 - Automatic — `transformContext` checks token count on every call, compacts only when needed
 - Configurable via global settings
 
-### Channel Search
+### Thread History
 
-The agent needs a way to search messages beyond its thread. Exposed as a tool:
+The agent can fetch recent thread messages via the `get_history` tool, which uses the chat SDK's paginated `thread.messages` iterator (newest first, reversed to chronological for output).
 
-```typescript
-// tools/search.ts
-// Searches channel message history via chat SDK
-{
-  name: "search_channel",
-  description: "Search messages in the current channel",
-  parameters: {
-    query: string,       // text to search for
-    limit?: number,      // max results (default 20)
-  },
-  execute: async ({ query, limit }, { thread }) => {
-    // Use thread.channel.messages (async iterator) to scan
-    // Filter by query match
-    // Return formatted results
-  }
-}
-```
+For deeper history search, the agent uses `bash` + `grep` on the thread's `log.jsonl` file, which contains all logged messages.
 
-This uses the chat SDK's `Channel.messages` async iterator, which paginates through the platform's message history API.
+**Future plan**: Sync full thread message history to `log.jsonl` before invoking the agent, so the agent can grep the complete history locally without network pagination. This avoids the chat SDK's O(n) paginated fetch for keyword searches and lets the agent use standard Unix tools (grep, awk, jq) over the full dataset.
 
 ---
 
@@ -668,8 +652,8 @@ Surgical string replacement in files. Requires `old_string` to be unique in the 
 ### `upload`
 Upload a file to the current thread. Takes a file path (relative to workspace or absolute), posts it via `thread.post({ file })`. Supports optional `comment` parameter sent as message text alongside the file.
 
-### `search_channel`
-Search channel message history via chat SDK. Uses `thread.channel.messages` async iterator with text filtering. Returns formatted message excerpts with timestamps and authors.
+### `get_history`
+Fetch recent messages from the current thread, newest first (reversed to chronological in output). Default 20, max 100. For deeper history search, the agent greps `log.jsonl` via `bash`.
 
 ---
 
@@ -767,5 +751,5 @@ The handlers are thin bridges — see [Orchestrator usage example](#usage-in-sca
 | Steering | Mid-run message injection | Checked between tool calls. Remaining tools skipped, LLM re-invoked with steering context. Never a system prompt rewrite. |
 | Thread scoping | Thread-based, not channel-based | One actor per thread ID. Data dirs use hierarchical layout (`data/{adapter}/{channel}/{thread}/`). Each thread gets its own context and skills. Memory is global + transport + channel (no thread-level memory). |
 | Context backfill | Sync from chat SDK + log.jsonl | Fetch thread messages via SDK on each run, diff against log, backfill missing messages into LLM context. |
-| Channel search | Tool-based | Agent can search broader channel history via `search_channel` tool using chat SDK's message iterator. |
+| History access | `get_history` tool + log.jsonl grep | Recent messages via SDK paginator; deeper search via bash+grep on log.jsonl. Future: pre-sync full history to log.jsonl before agent invocation. |
 | New thread creation | `orchestrator.sendToChannel()` | Orchestrator posts to channel via `chat.channel(id).post()`, gets `SentMessage.threadId`, constructs lazy Thread, routes to new actor. Actors only deal with threads that already exist. |
