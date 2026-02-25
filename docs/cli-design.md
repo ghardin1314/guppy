@@ -79,6 +79,8 @@ my-agent/
 ├── data/                     # Runtime data (gitignored)
 │   ├── IDENTITY.md           # Agent identity/personality
 │   ├── MEMORY.md             # Global memory
+│   ├── SYSTEM.md             # Environment modification log
+│   ├── settings.json         # Agent settings
 │   ├── events/
 │   └── skills/               # Global skills
 ├── my-agent.service          # systemd unit file

@@ -4,7 +4,7 @@
 
 `@guppy/core` is the agent runtime. It owns the LLM loop, tool execution, context management, memory, skills, events, and sandboxing. It is transport-agnostic — it receives a `Thread` from the chat SDK and operates through it.
 
-**Exports**: `createOrchestrator`, `createStore`, `createEventBus`, `loadSkills`, `createSandbox`
+**Exports**: `createOrchestrator`, `createStore`, `createEventBus`
 
 ---
 
@@ -31,7 +31,6 @@ Two methods:
 function createOrchestrator(deps: {
   store: Store;
   chat: Chat;
-  sandbox: Sandbox;
   config: Config;
 }): Orchestrator
 ```
@@ -49,7 +48,7 @@ This lives in the orchestrator because there's no thread actor yet — the threa
 
 ```typescript
 type ActorMessage =
-  | { type: "prompt"; text: string; thread: Thread; message: Message }
+  | { type: "prompt"; text: string; thread: Thread; message?: Message }
   | { type: "steer"; text: string }
   | { type: "abort" };
 ```
@@ -147,7 +146,7 @@ The actor owns backpressure decisions:
 ```typescript
 interface ActorState {
   threadId: string;
-  promptQueue: Array<{ text: string; thread: Thread; message: Message }>;
+  promptQueue: Array<{ text: string; thread: Thread; message?: Message }>;
   agent: Agent | null;            // pi-agent-core instance, null when inactive
   running: boolean;
   thread: Thread | null;          // cached from most recent prompt
@@ -159,7 +158,7 @@ interface ActorState {
 
 ```typescript
 // index.ts
-const orchestrator = createOrchestrator({ store, chat, sandbox, config });
+const orchestrator = createOrchestrator({ store, chat, config });
 
 // Chat SDK handlers — fire and forget
 chat.onNewMention(async (thread, message) => {
@@ -183,17 +182,15 @@ chat.onSlashCommand("/steer", async (event) => {
   await event.channel.postEphemeral(event.user.id, "Steering message sent.");
 });
 
-// Event bus — same interface
-eventBus.onEvent((event) => {
-  orchestrator.send(event.threadId, { type: "prompt", text: event.text });
-});
+// Event bus — dispatches to orchestrator internally
+const eventBus = createEventBus({ dataDir: config.dataDir, orchestrator });
 ```
 
 ---
 
 ## Agent Runner
 
-Built on pi-agent-core's `Agent` class, which owns the LLM loop, tool execution, steering, and follow-up queuing. One `Agent` instance per run (not reused across queue items).
+Built on pi-agent-core's `Agent` class, which owns the LLM loop, tool execution, steering, and follow-up queuing. One `Agent` instance per thread (created on actor activation, reused across queued prompts). System prompt, tools, and context are refreshed before each `agent.prompt()` call.
 
 ### pi-agent-core `Agent` Class
 
@@ -551,7 +548,7 @@ No automatic pruning. The agent manages its own memory content.
 
 ### Discovery
 
-Skills are markdown files (`SKILL.md`) with optional companion scripts, loaded from four locations:
+Skills are markdown files (`SKILL.md`) with optional companion scripts, loaded from three locations:
 
 | Scope | Path |
 |---|---|

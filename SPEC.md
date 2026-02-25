@@ -54,6 +54,8 @@ my-agent/
 ├── data/                     # Runtime data (gitignored)
 │   ├── IDENTITY.md           # Agent identity/personality
 │   ├── MEMORY.md             # Global memory
+│   ├── SYSTEM.md             # Environment modification log
+│   ├── settings.json         # Agent settings
 │   ├── events/
 │   └── skills/               # Global skills (agent-created)
 ├── my-agent.service          # systemd unit file (generated with correct paths)
@@ -204,7 +206,8 @@ guppy-chat/
 │   │   │       ├── read.ts      # File reading
 │   │   │       ├── write.ts     # File writing
 │   │   │       ├── edit.ts      # Surgical file editing
-│   │   │       └── upload.ts    # File upload to thread
+│   │   │       ├── upload.ts    # File upload to thread
+│   │   │       └── search.ts   # Channel message search
 │   │   └── package.json
 │   │
 │   ├── web/                     # @guppy/web — oRPC server glue
@@ -231,7 +234,7 @@ guppy-chat/
 
 The brain. Ported from mom, made transport-agnostic. See `docs/core-design.md` for detailed design.
 
-**Exports**: `createOrchestrator`, `createStore`, `createEventBus`, `loadSkills`, `createSandbox`
+**Exports**: `createOrchestrator`, `createStore`, `createEventBus`
 
 Uses an **orchestrator + virtual actor** model: external input (webhooks, events, slash commands) flows through the orchestrator, which routes messages to per-thread actors. Actors manage their own mailbox, agent lifecycle, and backpressure. Does not know about Slack, Teams, etc. — receives a `Thread` from the chat SDK and operates through it.
 

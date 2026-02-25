@@ -104,6 +104,7 @@ Reference users with @name format (e.g., @mario). The runtime converts to platfo
         ├── skills/                       # Channel-specific skills
         └── {threadId}/                   # Thread level
             ├── log.jsonl                 # Message history (no tool results)
+            ├── context.jsonl             # LLM context (managed by runtime)
             ├── attachments/              # User-shared files
             └── scratch/                  # Your working directory
 
