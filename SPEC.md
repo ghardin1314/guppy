@@ -7,16 +7,17 @@
 | [badlogic/pi-mono](https://github.com/badlogic/pi-mono) | `.context/pi-mono/` | Mom bot + pi-agent-core |
 | [vercel/chat](https://github.com/vercel/chat) | `.context/` (root) | Chat SDK — adapters, state, types |
 | @guppy/core design | `docs/core-design.md` | Detailed design: orchestrator, actors, agent runner, context, tools |
+| @guppy/cli design | `docs/cli-design.md` | CLI design: create, add transport, restart, transport registry |
 
 ---
 
 ## Vision
 
-A CLI tool (`create-guppy-chat`) that scaffolds transport-independent AI chat agents. Users pick their transports (Slack, Teams, Discord, etc.), and the CLI generates a ready-to-run bun project with the correct webhook routes, adapter config, and agent wiring.
+A CLI tool (`guppy`) that scaffolds and manages transport-independent AI chat agents. Users pick their transports (Slack, Teams, Discord, etc.), and the CLI generates a ready-to-run bun project with the correct webhook routes, adapter config, and agent wiring. Post-scaffold, the same CLI adds transports and restarts the service.
 
 The scaffolded agent gets the **operational power of mom** (bash execution, skills, event bus, memory, context management) with the **platform abstraction of the chat SDK** — out of the box.
 
-Everything we build — `@guppy/core`, `@guppy/web` — exists to make the scaffolded app work. The CLI is the product.
+Everything we build — `@guppy/core`, `@guppy/web`, `@guppy/cli` — exists to make the scaffolded app work. The CLI is the product.
 
 ---
 
@@ -42,7 +43,7 @@ Output (example: Slack selected):
 ```
 my-agent/
 ├── src/
-│   ├── index.ts              # Entry point (bun --hot compatible)
+│   ├── index.ts              # Entry point
 │   ├── config.ts             # Type-safe env config (only selected transport vars)
 │   ├── procedures/
 │   │   ├── index.ts          # Router composition (only selected transports)
@@ -54,13 +55,13 @@ my-agent/
 │   ├── events/
 │   └── skills/               # Global skills (agent-created)
 ├── my-agent.service          # systemd unit file (generated with correct paths)
-├── .env.example              # Required env vars for selected transports only
-├── package.json              # scripts: { dev: "bun --hot src/index.ts" }
+├── .env                      # Populated with entered credentials
+├── package.json              # scripts: { dev: "bun --watch src/index.ts" }
 ├── tsconfig.json
 └── Dockerfile                # Only if Docker sandbox selected
 ```
 
-The user owns all scaffolded files — they can add routes, modify handlers, add transports, etc. The CLI just gets you started fast.
+The user owns all scaffolded files — they can add routes, modify handlers, etc. New transports are added via `guppy add transport` (see `docs/cli-design.md`).
 
 ---
 
@@ -71,6 +72,7 @@ The user owns all scaffolded files — they can add routes, modify handlers, add
 ```typescript
 import { Chat } from "chat";
 import { createSlackAdapter } from "@chat-adapter/slack";
+// @guppy:adapter-imports
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { createStore, createOrchestrator, createEventBus } from "@guppy/core";
 import { createServer } from "@guppy/web";
@@ -84,6 +86,7 @@ const chat = new Chat({
       botToken: config.slack.botToken,
       signingSecret: config.slack.signingSecret,
     }),
+    // @guppy:adapters
   },
   state: createMemoryState(),
 });
@@ -159,10 +162,14 @@ export const health = procedure
 // src/procedures/index.ts — only imports for selected transports
 import { health } from "./health";
 import { slack } from "./webhooks/slack";
+// @guppy:webhook-imports
 
 export const router = {
   health,
-  webhooks: { slack },
+  webhooks: {
+    slack,
+    // @guppy:webhooks
+  },
 };
 
 export type Router = typeof router;
@@ -206,12 +213,12 @@ guppy-chat/
 │   │   │   └── lib.ts           # Base procedure with context typing
 │   │   └── package.json
 │   │
-│   └── cli/                     # create-guppy-chat — Scaffolding CLI
+│   └── cli/                     # @guppy/cli — CLI (create, add transport, restart)
 │       ├── src/
-│       │   ├── index.ts         # Entry point
-│       │   ├── prompts.ts       # Interactive prompts (transport selection, etc.)
-│       │   ├── scaffold.ts      # Project generation
-│       │   └── templates/       # Template files per transport
+│       │   ├── index.ts         # Entry point, command routing
+│       │   ├── commands/        # create, add-transport, restart
+│       │   ├── scaffold/        # Shared scaffold engine
+│       │   └── transports/      # Transport registry (slack, teams, etc.)
 │       └── package.json
 │
 ├── bun.lock
@@ -253,17 +260,9 @@ export const procedure = os.$context<GuppyContext>();
 
 **Exports**: `procedure`, `GuppyContext`, `createServer`
 
-### `create-guppy-chat` — CLI
+### `@guppy/cli` — CLI
 
-The product. Asks questions, generates a project. Responsible for:
-
-- Selecting which transport webhook routes to generate
-- Generating `procedures/index.ts` with correct imports
-- Generating `config.ts` with only the relevant env vars
-- Generating `.env.example` matching selected transports
-- Adding correct `@chat-adapter/*` dependencies to `package.json`
-- Generating systemd unit file (`{project-name}.service`) with correct paths and user
-- Optionally generating `Dockerfile` for sandbox mode
+The product. Single binary (`guppy`) with three commands: `create` (interactive scaffold), `add transport` (partial re-scaffold), `restart` (systemd restart). See `docs/cli-design.md` for full design.
 
 ---
 
@@ -271,7 +270,7 @@ The product. Asks questions, generates a project. Responsible for:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                         bun --hot                             │
+│                      Bun.serve (HTTP)                           │
 │                                                               │
 │  ┌──────────────┐    ┌────────────────────────────┐           │
 │  │  oRPC Router │    │      Chat SDK (core)        │           │
@@ -372,7 +371,7 @@ Mom's `SlackContext` methods map to chat SDK's `Thread`:
 
 ## systemd Service
 
-The CLI generates a systemd unit file for running the agent as a daemon. The file is templated with the project name, working directory, and user.
+The CLI generates a systemd unit file and installs it automatically during `guppy create` (copies to `~/.config/systemd/user/`, runs `daemon-reload` + `enable`). The user starts the service with `guppy restart`.
 
 Generated `my-agent.service` (user-level — no sudo required):
 
@@ -392,49 +391,20 @@ EnvironmentFile=%h/my-agent/.env
 WantedBy=default.target
 ```
 
-Install and start:
+Optional: keep running after logout:
 
 ```bash
-# Copy to user systemd dir
-mkdir -p ~/.config/systemd/user
-cp my-agent.service ~/.config/systemd/user/
-
-# Enable (auto-start on login) and start
-systemctl --user enable my-agent
-systemctl --user start my-agent
-
-# Check status
-systemctl --user status my-agent
-
-# Optional: keep running after logout (requires loginctl)
 loginctl enable-linger $USER
 ```
 
 ---
 
-## Hot Reload Strategy
+## Process Management
 
-`bun --hot` preserves the module graph and re-executes changed modules without restarting the process. Key considerations:
+No in-process hot reload. Structural changes (adding transports, changing config) require a process restart. Dynamic behavior (new automations, recurring tasks, custom workflows) comes from the agent writing its own skills and event bus entries at runtime — no restart needed.
 
-1. **Server socket**: Use `Bun.serve` with `reusePort` — hot reload replaces the fetch handler without dropping the listener
-2. **Agent state**: Active agent runs are in-memory. Hot reload during an active run is safe because the running closure captures its own references
-3. **Event bus**: Cron jobs and timers survive reload since they're held by the event loop, not module scope. Re-registration on reload needs dedup logic
-4. **Chat SDK instance**: Re-created on reload, but stateless (state lives in StateAdapter). Webhook handlers re-register cleanly
-
-```typescript
-// src/index.ts — bun --hot compatible
-const server = Bun.serve({
-  port: 3000,
-  fetch: router.handler, // replaced on hot reload
-});
-
-// Cleanup on hot reload
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
-    eventBus.stop();
-  });
-}
-```
+- **Development**: `bun --watch src/index.ts` — restarts on file change
+- **Production**: systemd service — `guppy restart` wraps `systemctl --user restart {service}`
 
 ---
 
@@ -504,7 +474,7 @@ data/
 | **Thread identity** | Slack channel ID | Chat SDK thread ID (`adapter:channel:thread`) |
 | **Message format** | Raw Slack text | Normalized mdast AST |
 | **Runtime** | Node.js | Bun |
-| **Hot reload** | Restart process | `bun --hot` (in-process) |
+| **Process management** | Restart process | `guppy restart` (systemd) / `bun --watch` (dev) |
 | **Event injection** | Filesystem only | Filesystem only (same) |
 | **State** | In-memory maps | Pluggable StateAdapter (memory/Redis) |
 | **Agent framework** | `@mariozechner/pi-agent-core` | Same — `@mariozechner/pi-agent-core` |
@@ -520,7 +490,7 @@ data/
    - Affects dev experience (tunnels simplify local testing with real webhooks) and production deployment story
 
 2. **Secrets management**: Use `Bun.secrets` (OS keychain) vs `.env` files vs both?
-   - `Bun.secrets` reads at call time (hot-reload friendly), but experimental and needs libsecret on headless Linux
+   - `Bun.secrets` reads at call time, but experimental and needs libsecret on headless Linux
    - `.env` + systemd `EnvironmentFile` is standard but requires restart to pick up changes
    - Could fall back: `await Bun.secrets.get(...) ?? Bun.env.X`
    - Explore during implementation once we see real usage patterns
@@ -538,3 +508,4 @@ data/
 - **Steering**: Mid-run message injection via `agent.steer()` — never a system prompt rewrite
 - **Scoping**: Thread-based, not channel-based — each thread gets its own actor, context, memory, skills
 - **New thread creation**: `orchestrator.sendToChannel()` — posts to channel, gets thread ID, routes to new actor
+- **No hot reload**: Process restart for structural changes; dynamic behavior via agent-written skills + event bus entries
