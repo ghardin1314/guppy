@@ -1,8 +1,8 @@
-import type { Message } from "chat";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { Message, Thread } from "chat";
+import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 
-export type { Message } from "chat";
-export type { AgentMessage } from "@mariozechner/pi-agent-core";
+export type { Message, Thread } from "chat";
+export type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 
 export interface LogEntry {
   date: string;
@@ -35,3 +35,10 @@ export interface Settings {
 export interface StoreOptions {
   dataDir: string;
 }
+
+export type ActorMessage =
+  | { type: "prompt"; text: string; thread: Thread; message?: Message }
+  | { type: "steer"; text: string }
+  | { type: "abort" };
+
+export type AgentFactory = (threadId: string) => Agent;
