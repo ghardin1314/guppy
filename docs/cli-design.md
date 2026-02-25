@@ -77,9 +77,10 @@ my-agent/
 │   │   └── webhooks/
 │   │       └── slack.ts      # POST /webhooks/slack
 ├── data/                     # Runtime data (gitignored)
-│   ├── MEMORY.md
+│   ├── IDENTITY.md           # Agent identity/personality
+│   ├── MEMORY.md             # Global memory
 │   ├── events/
-│   └── skills/
+│   └── skills/               # Global skills
 ├── my-agent.service          # systemd unit file
 ├── .env                      # Populated with entered credentials
 ├── package.json

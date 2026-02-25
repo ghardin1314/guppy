@@ -120,8 +120,8 @@ INACTIVE ──(first message)──→ ACTIVE ──(idle timeout)──→ INA
 
 **Activation** (INACTIVE → ACTIVE):
 - Load context from store (`context.jsonl`)
-- Read memory files (global + thread)
-- Load skills (global + thread)
+- Read memory files (global + transport + channel)
+- Load skills (global + transport + channel)
 - Create pi-agent-core `Agent` instance
 - Subscribe to `AgentEvent` stream
 - Cache `Thread` reference from first prompt message
@@ -233,7 +233,7 @@ const agent = new Agent({
   getApiKey,            // dynamic API key resolution per call
 });
 
-agent.setSystemPrompt(buildSystemPrompt({ memory, skills, sandbox }));
+agent.setSystemPrompt(buildSystemPrompt({ dataDir, identity, memory, skills, sandbox, settings, threadMeta }));
 agent.setTools(buildTools({ thread, store, sandbox }));
 agent.replaceMessages(store.loadContext(threadId));
 ```
@@ -388,7 +388,7 @@ When context grows beyond a threshold:
 - **Kept recent tokens**: 20,000 (recent messages preserved verbatim)
 - Older messages summarized by the LLM into a compact "previously..." block
 - Automatic — `transformContext` checks token count on every call, compacts only when needed
-- Configurable via per-thread or global settings
+- Configurable via global settings
 
 ### Channel Search
 
@@ -422,21 +422,41 @@ The store manages per-thread filesystem state.
 
 ### Directory Layout
 
+Data is organized hierarchically by transport → channel → thread:
+
 ```
-data/threads/{encoded-thread-id}/
-├── MEMORY.md           # Thread-specific memory
-├── log.jsonl           # Message history
-├── context.jsonl       # LLM context
-├── attachments/        # Downloaded files
-├── scratch/            # Agent working directory
-└── skills/             # Thread-specific skills
+data/
+├── IDENTITY.md                           # Agent identity/personality
+├── MEMORY.md                             # Global memory (all transports)
+├── SYSTEM.md                             # Environment modification log
+├── settings.json                         # Agent settings
+├── events/                               # Event bus JSON files
+├── skills/                               # Global skills
+└── {adapter}/                            # Transport level
+    ├── MEMORY.md                         # Transport memory
+    ├── skills/                           # Transport-specific skills
+    └── {channelId}/                      # Channel level
+        ├── MEMORY.md                     # Channel memory
+        ├── skills/                       # Channel-specific skills
+        └── {threadId}/                   # Thread level
+            ├── log.jsonl                 # Message history
+            ├── context.jsonl             # LLM context
+            ├── attachments/              # Downloaded files
+            └── scratch/                  # Agent working directory
 ```
 
-### Thread ID Encoding
+### Path Resolution
 
-Chat SDK thread IDs are `adapter:channel:thread` (e.g., `slack:C123ABC:1234567890.123456`). These contain colons which are problematic for filesystems.
+Chat SDK thread IDs are composite: `adapter:channel:thread` (e.g., `slack:C123ABC:1234567890.123456`). The store splits this into three path segments:
 
-Encoding: replace `:` with `--` for directory names. So `slack:C123ABC:main` → `slack--C123ABC--main`.
+```typescript
+function threadDir(dataDir: string, threadId: string): string {
+  const [adapter, channelId, thread] = threadId.split(":");
+  return join(dataDir, adapter, encode(channelId), encode(thread));
+}
+```
+
+Channel and thread IDs are encoded for filesystem safety (e.g., characters like `/` in Google Chat's `spaces/ABC123` are escaped). Adapter names (`slack`, `teams`, etc.) are always safe.
 
 ### Message Logging
 
@@ -468,8 +488,10 @@ interface LogEntry {
 
 ```typescript
 interface Store {
-  // Thread data directory
+  // Path resolution
   threadDir(threadId: string): string;
+  channelDir(threadId: string): string;
+  transportDir(threadId: string): string;
 
   // Message logging
   logMessage(threadId: string, message: Message): void;
@@ -483,7 +505,6 @@ interface Store {
 
   // Settings
   getSettings(): Settings;
-  getThreadSettings(threadId: string): ThreadSettings;
 }
 ```
 
@@ -491,28 +512,36 @@ interface Store {
 
 ## Memory
 
-### Two Levels
+### Three Levels
 
 | Scope | Path | Purpose |
 |---|---|---|
-| Global | `data/MEMORY.md` | Shared across all threads — identity, preferences, learned facts |
-| Per-thread | `data/threads/{id}/MEMORY.md` | Thread-specific context — project details, ongoing work |
+| Global | `data/MEMORY.md` | Shared across all transports — preferences, learned facts |
+| Transport | `data/{adapter}/MEMORY.md` | Platform-specific conventions, cross-channel knowledge |
+| Channel | `data/{adapter}/{channelId}/MEMORY.md` | Channel-specific context — project details, ongoing work |
+
+No thread-level memory. Threads are short-lived; `context.jsonl` handles conversation state.
 
 ### Read
 
-Both files read fresh at the start of every agent run. Injected into the system prompt:
+All three files read fresh before every `agent.prompt()` call. Injected into the system prompt:
 
 ```
-## Working Memory (Global)
-{contents of data/MEMORY.md or "(no working memory yet)"}
+### Global Memory
+{contents of data/MEMORY.md}
 
-## Working Memory (This Thread)
-{contents of data/threads/{id}/MEMORY.md or "(no working memory yet)"}
+### Transport Memory ({adapterName})
+{contents of data/{adapter}/MEMORY.md}
+
+### Channel Memory
+{contents of data/{adapter}/{channelId}/MEMORY.md}
 ```
+
+Missing or empty files are omitted. If all three are empty: `"(no memory yet)"`.
 
 ### Write
 
-The agent writes memory via its file tools (write/edit). No special memory API — it's just a file the agent knows about. The system prompt instructs the agent on when/how to update memory.
+The agent writes memory via its file tools (write/edit). No special memory API — it's just a file the agent knows about. The system prompt instructs the agent to use the narrowest scope that fits.
 
 No automatic pruning. The agent manages its own memory content.
 
@@ -522,14 +551,15 @@ No automatic pruning. The agent manages its own memory content.
 
 ### Discovery
 
-Skills are markdown files (`SKILL.md`) with optional companion scripts, loaded from two locations:
+Skills are markdown files (`SKILL.md`) with optional companion scripts, loaded from four locations:
 
 | Scope | Path |
 |---|---|
 | Global | `data/skills/{skill-name}/SKILL.md` |
-| Per-thread | `data/threads/{id}/skills/{skill-name}/SKILL.md` |
+| Transport | `data/{adapter}/skills/{skill-name}/SKILL.md` |
+| Channel | `data/{adapter}/{channelId}/skills/{skill-name}/SKILL.md` |
 
-Per-thread skills override global skills by name.
+Narrower scopes override broader scopes by name (channel > transport > global).
 
 ### Format
 
@@ -552,12 +582,15 @@ YAML frontmatter for metadata. Body is free-form instructions injected into the 
 
 ```typescript
 function loadSkills(dataDir: string, threadId: string): Skill[] {
+  const [adapter, channelId] = threadId.split(":");
   const global = loadSkillsFromDir(join(dataDir, "skills"));
-  const thread = loadSkillsFromDir(join(dataDir, "threads", encode(threadId), "skills"));
-  // Thread skills override global by name
+  const transport = loadSkillsFromDir(join(dataDir, adapter, "skills"));
+  const channel = loadSkillsFromDir(join(dataDir, adapter, encode(channelId), "skills"));
+  // Narrower scopes override broader by name
   const merged = new Map<string, Skill>();
   for (const s of global) merged.set(s.name, s);
-  for (const s of thread) merged.set(s.name, s);
+  for (const s of transport) merged.set(s.name, s);
+  for (const s of channel) merged.set(s.name, s);
   return [...merged.values()];
 }
 ```
@@ -735,7 +768,7 @@ The handlers are thin bridges — see [Orchestrator usage example](#usage-in-sca
 | Concurrency mechanism | Actor mailbox (Option A) | SDK lock is 30s, agent runs take minutes. Handlers return fast, actor manages sequencing. Distributed locking can layer on later (Option C) if needed. |
 | Message routing | `steer`/`abort` bypass prompt queue | Actor processes these immediately against the running agent. Prompts queue behind active run. |
 | Steering | Mid-run message injection | Checked between tool calls. Remaining tools skipped, LLM re-invoked with steering context. Never a system prompt rewrite. |
-| Thread scoping | Thread-based, not channel-based | One actor per thread ID. Data dirs keyed by full thread ID (`adapter:channel:thread`). Each thread gets its own context, memory, skills. |
+| Thread scoping | Thread-based, not channel-based | One actor per thread ID. Data dirs use hierarchical layout (`data/{adapter}/{channel}/{thread}/`). Each thread gets its own context and skills. Memory is global + transport + channel (no thread-level memory). |
 | Context backfill | Sync from chat SDK + log.jsonl | Fetch thread messages via SDK on each run, diff against log, backfill missing messages into LLM context. |
 | Channel search | Tool-based | Agent can search broader channel history via `search_channel` tool using chat SDK's message iterator. |
 | New thread creation | `orchestrator.sendToChannel()` | Orchestrator posts to channel via `chat.channel(id).post()`, gets `SentMessage.threadId`, constructs lazy Thread, routes to new actor. Actors only deal with threads that already exist. |

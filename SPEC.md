@@ -8,6 +8,7 @@
 | [vercel/chat](https://github.com/vercel/chat) | `.context/` (root) | Chat SDK — adapters, state, types |
 | @guppy/core design | `docs/core-design.md` | Detailed design: orchestrator, actors, agent runner, context, tools |
 | @guppy/cli design | `docs/cli-design.md` | CLI design: create, add transport, restart, transport registry |
+| System prompt design | `docs/system-prompt-design.md` | System prompt template, memory hierarchy, config schema |
 
 ---
 
@@ -51,7 +52,8 @@ my-agent/
 │   │   └── webhooks/
 │   │       └── slack.ts      # POST /webhooks/slack
 ├── data/                     # Runtime data (gitignored)
-│   ├── MEMORY.md
+│   ├── IDENTITY.md           # Agent identity/personality
+│   ├── MEMORY.md             # Global memory
 │   ├── events/
 │   └── skills/               # Global skills (agent-created)
 ├── my-agent.service          # systemd unit file (generated with correct paths)
@@ -320,7 +322,7 @@ The product. Single binary (`guppy`) with three commands: `create` (interactive 
 | **Bash execution** | `tools/bash.ts` — shell exec with output truncation, temp files | Same, via `sandbox.ts` executor abstraction |
 | **File tools** | read, write, edit, attach | read, write, edit, upload (via chat SDK's `thread.post({ file })`) |
 | **Context management** | `context.ts` — log.jsonl ↔ context.jsonl sync, compaction | Same file-based approach, thread-keyed. Compaction via pi-agent-core's `transformContext` hook |
-| **Memory system** | Global + per-channel MEMORY.md | Global + per-thread MEMORY.md |
+| **Memory system** | Global + per-channel MEMORY.md | Global + transport + channel MEMORY.md (3 levels) |
 | **Skills** | SKILL.md + scripts in `skills/` dirs | Same discovery, same format |
 | **Event bus** | FS-watched `events/` dir, cron/one-shot/immediate | Same, dispatches to orchestrator. Supports both existing threads and new thread creation |
 | **Per-thread queue** | Sequential processing per channel, max 5 queued | Virtual actor per thread with mailbox. Sequential prompt processing, steer/abort bypass queue |
@@ -445,22 +447,26 @@ See `docs/core-design.md` for full event bus details.
 
 ```
 data/
-├── MEMORY.md                           # Global memory
-├── SYSTEM.md                           # Environment log
-├── settings.json                       # Agent settings
-├── events/                             # Event bus JSON files
-├── skills/                             # Global skills
+├── IDENTITY.md                           # Agent identity/personality
+├── MEMORY.md                             # Global memory
+├── SYSTEM.md                             # Environment log
+├── settings.json                         # Agent settings
+├── events/                               # Event bus JSON files
+├── skills/                               # Global skills
 │   └── github-notify/
 │       ├── SKILL.md
 │       └── check.sh
-└── threads/
-    └── {encoded-thread-id}/            # Per-thread storage
-        ├── MEMORY.md                   # Thread-specific memory
-        ├── log.jsonl                   # Message history
-        ├── context.jsonl               # LLM context (compacted)
-        ├── attachments/                # Downloaded files
-        ├── scratch/                    # Working directory
-        └── skills/                     # Thread-specific skills
+└── {adapter}/                            # Transport level (e.g., slack/)
+    ├── MEMORY.md                         # Transport memory
+    ├── skills/                           # Transport-specific skills
+    └── {channelId}/                      # Channel level
+        ├── MEMORY.md                     # Channel memory
+        ├── skills/                       # Channel-specific skills
+        └── {threadId}/                   # Thread level
+            ├── log.jsonl                 # Message history
+            ├── context.jsonl             # LLM context (compacted)
+            ├── attachments/              # Downloaded files
+            └── scratch/                  # Working directory
 ```
 
 ---
@@ -471,7 +477,7 @@ data/
 |---|---|---|
 | **Transport** | Slack Socket Mode only | Any chat SDK adapter (webhook-based) |
 | **Process model** | Slack WebSocket → internal queue | HTTP server → oRPC → chat SDK → orchestrator → actors |
-| **Thread identity** | Slack channel ID | Chat SDK thread ID (`adapter:channel:thread`) |
+| **Thread identity** | Slack channel ID | Chat SDK thread ID (`adapter:channel:thread`), stored as `data/{adapter}/{channel}/{thread}/` |
 | **Message format** | Raw Slack text | Normalized mdast AST |
 | **Runtime** | Node.js | Bun |
 | **Process management** | Restart process | `guppy restart` (systemd) / `bun --watch` (dev) |
@@ -506,6 +512,6 @@ data/
 - **Routing model**: Orchestrator + virtual actors (one per thread, created on demand)
 - **Concurrency**: Actor mailbox is sole mechanism — SDK's 30s lock is irrelevant (handlers return immediately)
 - **Steering**: Mid-run message injection via `agent.steer()` — never a system prompt rewrite
-- **Scoping**: Thread-based, not channel-based — each thread gets its own actor, context, memory, skills
+- **Scoping**: Thread-based, not channel-based — each thread gets its own actor, context, skills. Memory is global + transport + channel (no thread-level memory)
 - **New thread creation**: `orchestrator.sendToChannel()` — posts to channel, gets thread ID, routes to new actor
 - **No hot reload**: Process restart for structural changes; dynamic behavior via agent-written skills + event bus entries
