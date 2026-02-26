@@ -16,6 +16,7 @@ export interface ExecResult {
 }
 
 export interface Sandbox {
+  type: "host" | "docker";
   exec(command: string, options?: ExecOptions): Promise<ExecResult>;
   workspacePath: string;
 }
@@ -24,6 +25,7 @@ const DEFAULT_TIMEOUT = 120_000;
 
 export function createHostSandbox(workspacePath: string): Sandbox {
   return {
+    type: "host",
     workspacePath,
 
     async exec(command: string, options?: ExecOptions): Promise<ExecResult> {

@@ -14,12 +14,18 @@ export type {
   Settings,
   StoreOptions,
   Thread,
+  ThreadMeta,
 } from "./types";
 export { stripAnsi, sanitizeOutput } from "./sanitize";
 export { truncateHead, truncateTail, MAX_LINES, MAX_BYTES } from "./truncate";
 export type { TruncateResult } from "./truncate";
 export { createHostSandbox } from "./sandbox";
 export type { Sandbox, ExecOptions, ExecResult } from "./sandbox";
+export { formatMemory } from "./memory";
+export { loadSkills, formatSkillsForPrompt } from "./skills";
+export type { Skill } from "./skills";
+export { buildSystemPrompt, loadIdentity } from "./system-prompt";
+export type { BuildSystemPromptOptions } from "./system-prompt";
 export { buildTools } from "./tools";
 export type { ToolDeps } from "./tools";
 export {

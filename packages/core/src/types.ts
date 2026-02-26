@@ -41,4 +41,11 @@ export type ActorMessage =
   | { type: "steer"; text: string }
   | { type: "abort" };
 
+export interface ThreadMeta {
+  adapterName: string;
+  channelId: string;
+  threadId: string;
+  isDM: boolean;
+}
+
 export type AgentFactory = (threadId: string) => Agent;
