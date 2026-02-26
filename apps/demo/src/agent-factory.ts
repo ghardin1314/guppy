@@ -27,7 +27,7 @@ export function createAgentFactory(deps: AgentFactoryDeps): AgentFactory {
     const { adapter, channelKey, threadKey } = resolveThreadKeys(thread.adapter, thread.id);
     const meta: ThreadMeta = {
       adapterName: adapter,
-      channelId: thread.channelId,
+      channelId: `${adapter}:${channelKey}`,
       threadId: thread.id,
       channelKey,
       threadKey,

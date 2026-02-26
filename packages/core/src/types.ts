@@ -1,7 +1,7 @@
-import type { Message, Thread } from "chat";
+import type { Message, SentMessage, Thread } from "chat";
 import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 
-export type { Message, Thread } from "chat";
+export type { Message, SentMessage, Thread } from "chat";
 export type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 
 export interface LogEntry {
@@ -39,7 +39,7 @@ export interface StoreOptions {
 }
 
 export type ActorMessage =
-  | { type: "prompt"; text: string; thread: Thread; message?: Message }
+  | { type: "prompt"; text: string; thread: Thread; message?: Message; sentMessage?: SentMessage }
   | { type: "steer"; text: string }
   | { type: "abort" };
 

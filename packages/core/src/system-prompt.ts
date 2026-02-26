@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { encode, channelDir as channelDirFrom, threadDir as threadDirFrom } from "./encode";
+import { channelDir as channelDirFrom, encode } from "./encode";
 import type { Sandbox } from "./sandbox";
 import type { Skill } from "./skills";
 import { formatSkillsForPrompt } from "./skills";
@@ -32,7 +32,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
   const { adapterName, channelId, threadId, channelKey, threadKey } =
     threadMeta;
   const channelDir = channelDirFrom(dataDir, adapterName, channelKey);
-  const threadDir = threadDirFrom(dataDir, adapterName, channelKey, threadKey);
+
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const envDescription =
@@ -122,17 +122,17 @@ You can schedule events that wake you up at specific times or when external thin
 
 **Immediate** - Triggers as soon as the runtime sees the file. Use in scripts/webhooks to signal external events.
 \`\`\`json
-{"type": "immediate", "threadId": "${threadDir}", "text": "New GitHub issue opened"}
+{"type": "immediate", "threadId": "${threadId}", "text": "New GitHub issue opened"}
 \`\`\`
 
 **One-shot** - Triggers once at a specific time. Use for reminders. The \`at\` field must be ISO 8601 with offset (e.g. \`+01:00\`, \`-05:00\`, or \`Z\`).
 \`\`\`json
-{"type": "one-shot", "threadId": "${threadDir}", "text": "Remind about dentist", "at": "2025-12-15T09:00:00-05:00"}
+{"type": "one-shot", "threadId": "${threadId}", "text": "Remind about dentist", "at": "2025-12-15T09:00:00-05:00"}
 \`\`\`
 
 **Periodic** - Triggers on a cron schedule. Use for recurring tasks.
 \`\`\`json
-{"type": "periodic", "threadId": "${threadDir}", "text": "Check inbox and summarize", "schedule": "0 9 * * 1-5", "timezone": "${timezone}"}
+{"type": "periodic", "threadId": "${threadId}", "text": "Check inbox and summarize", "schedule": "0 9 * * 1-5", "timezone": "${timezone}"}
 \`\`\`
 
 To create an event in a **new thread** (posts to channel, creates thread, runs agent):
@@ -141,6 +141,10 @@ To create an event in a **new thread** (posts to channel, creates thread, runs a
 \`\`\`
 
 Events with \`threadId\` run in that thread. Events with \`channelId\` (no \`threadId\`) create a new thread.
+
+**Current IDs** (use these for events targeting this thread/channel):
+- threadId: \`${threadId}\`
+- channelId: \`${channelId}\`
 
 ### Cron Format
 \`minute hour day-of-month month day-of-week\`
@@ -156,7 +160,7 @@ One-shot \`at\` values must include the UTC offset (e.g. \`-05:00\` for EST, \`-
 Use unique filenames to avoid overwriting:
 \`\`\`bash
 cat > ${dataDir}/events/reminder-$(date +%s).json << 'EOF'
-{"type": "one-shot", "threadId": "${threadDir}", "text": "Dentist tomorrow", "at": "2025-12-14T09:00:00-05:00"}
+{"type": "one-shot", "threadId": "${threadId}", "text": "Dentist tomorrow", "at": "2025-12-14T09:00:00-05:00"}
 EOF
 \`\`\`
 

@@ -99,7 +99,12 @@ class RunMessage {
   private statusLines: string[] = [];
   private chain: Promise<void> = Promise.resolve();
 
-  constructor(private thread: Thread) {}
+  constructor(private thread: Thread, existingMessage?: SentMessage) {
+    if (existingMessage) {
+      this.sentMessage = existingMessage;
+      this.statusLines.push(existingMessage.text);
+    }
+  }
 
   /** Post the initial "_Thinking_" status */
   thinking(): void {
@@ -178,6 +183,7 @@ interface PromptItem {
   text: string;
   thread: Thread;
   message?: Message;
+  sentMessage?: SentMessage;
 }
 
 const DEFAULT_MAX_QUEUE_DEPTH = 20;
@@ -208,7 +214,7 @@ export class Actor {
             .catch(() => {});
           return;
         }
-        this.queue.push({ text: msg.text, thread: msg.thread, message: msg.message });
+        this.queue.push({ text: msg.text, thread: msg.thread, message: msg.message, sentMessage: msg.sentMessage });
         if (!this.running) {
           this.drainQueue();
         }
@@ -236,7 +242,7 @@ export class Actor {
 
     while (this.queue.length > 0) {
       const item = this.queue.shift()!;
-      const msg = new RunMessage(item.thread);
+      const msg = new RunMessage(item.thread, item.sentMessage);
       this.runMessage = msg;
 
       try {

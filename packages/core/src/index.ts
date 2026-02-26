@@ -40,6 +40,7 @@ export type {
   LogEntry,
   Message,
   OneShotEvent,
+  SentMessage,
   PeriodicEvent,
   Settings,
   StoreOptions,

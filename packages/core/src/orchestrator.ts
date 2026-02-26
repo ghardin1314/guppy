@@ -1,5 +1,5 @@
 import { ThreadImpl, deriveChannelId } from "chat";
-import type { Adapter, StateAdapter } from "chat";
+import type { Adapter, SentMessage, StateAdapter } from "chat";
 import { Actor } from "./actor";
 import type { Store } from "./store";
 import type { ActorMessage, AgentFactory, EventTarget, Settings } from "./types";
@@ -8,7 +8,7 @@ import type { ActorMessage, AgentFactory, EventTarget, Settings } from "./types"
 export interface ChatHandle {
   channel(
     channelId: string
-  ): { post(text: string): Promise<{ threadId: string }> };
+  ): { post(text: string): Promise<SentMessage> };
   getAdapter(name: string): Adapter;
   getState(): StateAdapter;
 }
@@ -79,12 +79,12 @@ export class Orchestrator {
     channelId: string,
     text: string
   ): Promise<void> {
-    const sentMessage = await this.chat
+    const sent = await this.chat
       .channel(channelId)
       .post(text);
 
-    const thread = this.resolveThread(sentMessage.threadId);
-    this.send(sentMessage.threadId, { type: "prompt", text, thread });
+    const thread = this.resolveThread(sent.threadId);
+    this.send(sent.threadId, { type: "prompt", text, thread, sentMessage: sent });
   }
 
   shutdown(): void {

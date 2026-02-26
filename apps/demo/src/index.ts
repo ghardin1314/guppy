@@ -84,16 +84,20 @@ await discord
   .catch((error) => {
     console.error("Error connecting gateway:", error);
   });
-setInterval(() => {
-  discord
-    .startGatewayListener({ waitUntil: () => {} }, GATEWAY_CYCLE)
-    .then(() => {
-      console.log("Gateway reconnected");
-    })
-    .catch((error) => {
-      console.error("Error reconnecting gateway:", error);
-    });
-}, GATEWAY_CYCLE);
+setInterval(
+  () => {
+    discord
+      .startGatewayListener({ waitUntil: () => {} }, GATEWAY_CYCLE)
+      .then(() => {
+        console.log("Gateway reconnected");
+      })
+      .catch((error) => {
+        console.error("Error reconnecting gateway:", error);
+      });
+  },
+  // Reconnect 1 second early to ensure we always have a connection
+  GATEWAY_CYCLE - 1000,
+);
 
 // -- HTTP server --
 
