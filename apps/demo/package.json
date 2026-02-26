@@ -11,8 +11,6 @@
     "@guppy/core": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.55.0",
     "@mariozechner/pi-ai": "^0.55.0",
-    "@orpc/openapi": "^1.4.0",
-    "@orpc/server": "^1.4.0",
     "chat": "^4.14.0",
     "@chat-adapter/slack": "^4.14.0",
     "@chat-adapter/discord": "^4.14.0",

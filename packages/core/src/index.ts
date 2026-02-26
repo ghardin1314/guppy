@@ -26,6 +26,8 @@ export type {
   ThreadMeta,
   ThreadTarget,
 } from "./types";
+export { Guppy } from "./guppy";
+export type { GuppyOptions } from "./guppy";
 export { stripAnsi, sanitizeOutput } from "./sanitize";
 export { truncateHead, truncateTail, MAX_LINES, MAX_BYTES } from "./truncate";
 export type { TruncateResult } from "./truncate";
