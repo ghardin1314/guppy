@@ -1,8 +1,16 @@
-import type { Message, SentMessage, Thread } from "chat";
-import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
-
-export type { Message, SentMessage, Thread } from "chat";
+import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Adapter, Message, SentMessage, StateAdapter, Thread } from "chat";
+import type { ChannelKey, ThreadKey } from "./encode";
+import type { Skill } from "./skills";
 export type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
+export type { Message, SentMessage, Thread } from "chat";
+
+/** Minimal Chat interface — mirrors Chat's public API. */
+export interface ChatHandle {
+  channel(channelId: string): { post(text: string): Promise<SentMessage> };
+  getAdapter(name: string): Adapter;
+  getState(): StateAdapter;
+}
 
 export interface LogEntry {
   date: string;
@@ -15,11 +23,7 @@ export interface LogEntry {
   attachments?: Array<{ original: string; local: string; mimeType?: string }>;
 }
 
-// TODO: How much of this are we actually using?
 export interface Settings {
-  defaultProvider: string;
-  defaultModel: string;
-  defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high";
   compaction?: {
     enabled?: boolean;
     reserveTokens?: number;
@@ -39,19 +43,30 @@ export interface StoreOptions {
 }
 
 export type ActorMessage =
-  | { type: "prompt"; text: string; thread: Thread; message?: Message; sentMessage?: SentMessage }
+  | {
+      type: "prompt";
+      text: string;
+      thread: Thread;
+      message?: Message;
+      sentMessage?: SentMessage;
+    }
   | { type: "steer"; text: string }
   | { type: "abort" };
 
-import type { ChannelKey, ThreadKey } from "./encode";
-
 export interface ThreadMeta {
   adapterName: string;
-  channelId: string;   // composite, e.g. "slack:C123ABC"
-  threadId: string;    // composite, e.g. "slack:C123ABC:1234567890.123456"
+  channelId: string; // composite, e.g. "slack:C123ABC"
+  threadId: string; // composite, e.g. "slack:C123ABC:1234567890.123456"
   channelKey: ChannelKey;
   threadKey: ThreadKey;
   isDM: boolean;
+}
+
+export interface SystemPromptContext {
+  identity: string;
+  memory: string;
+  skills: Skill[];
+  threadMeta: ThreadMeta;
 }
 
 export type AgentFactory = (thread: Thread) => Agent;
@@ -103,5 +118,5 @@ export type GuppyEvent = Static<typeof GuppyEventSchema>;
 
 export type EventDispatch = (
   target: EventTarget,
-  formattedText: string
+  formattedText: string,
 ) => void;

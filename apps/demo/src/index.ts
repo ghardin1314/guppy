@@ -1,12 +1,19 @@
 import { createDiscordAdapter } from "@chat-adapter/discord";
 // import { createSlackAdapter } from "@chat-adapter/slack";
 import { createMemoryState } from "@chat-adapter/state-memory";
-import { Guppy, createHostSandbox } from "@guppy/core";
+import {
+  Guppy,
+  createBashTool,
+  createEditTool,
+  createReadTool,
+  createUploadTool,
+  createWriteTool,
+  createHostSandbox,
+} from "@guppy/core";
 import { getModel } from "@mariozechner/pi-ai";
 import { Chat } from "chat";
 import { join } from "node:path";
-import { createAgentFactory } from "./agent-factory";
-import { settings } from "./settings";
+import { buildSystemPrompt } from "./system-prompt";
 
 // -- Config --
 
@@ -28,16 +35,22 @@ const chat = new Chat({
 
 const sandbox = createHostSandbox(process.cwd());
 
-const model = getModel("anthropic", "claude-sonnet-4-5");
-
-const agentFactory = createAgentFactory({
+const guppy = new Guppy({
   dataDir: DATA_DIR,
-  sandbox,
-  settings,
-  model,
+  chat,
+  agent: {
+    model: getModel("anthropic", "claude-sonnet-4-5"),
+    modelSettings: { thinkingLevel: "high" },
+    tools: [
+      createBashTool(sandbox),
+      createReadTool(sandbox.workspacePath),
+      createWriteTool(sandbox.workspacePath),
+      createEditTool(sandbox.workspacePath),
+      createUploadTool(sandbox.workspacePath, chat),
+    ],
+    systemPrompt: (ctx) => buildSystemPrompt(ctx, { dataDir: DATA_DIR, sandbox }),
+  },
 });
-
-const guppy = new Guppy({ dataDir: DATA_DIR, agentFactory, settings, chat });
 
 // -- Chat handlers --
 

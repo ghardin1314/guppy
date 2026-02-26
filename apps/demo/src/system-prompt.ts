@@ -1,34 +1,21 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { channelDir as channelDirFrom, encode } from "./encode";
-import type { Sandbox } from "./sandbox";
-import type { Skill } from "./skills";
-import { formatSkillsForPrompt } from "./skills";
-import type { Settings, ThreadMeta } from "./types";
+import type { Sandbox, SystemPromptContext } from "@guppy/core";
+import {
+  channelDir as channelDirFrom,
+  encode,
+  formatSkillsForPrompt,
+} from "@guppy/core";
 
-const DEFAULT_IDENTITY = "You are a chat assistant. Be concise. No emojis.";
-
-export function loadIdentity(dataDir: string): string {
-  try {
-    const content = readFileSync(join(dataDir, "IDENTITY.md"), "utf-8").trim();
-    if (content) return content;
-  } catch {}
-  return DEFAULT_IDENTITY;
-}
-
-export interface BuildSystemPromptOptions {
+interface BuildSystemPromptOpts {
   dataDir: string;
-  identity: string;
-  memory: string;
-  skills: Skill[];
   sandbox: Sandbox;
-  settings: Settings;
-  threadMeta: ThreadMeta;
 }
 
-export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
-  const { dataDir, identity, memory, skills, sandbox, settings, threadMeta } =
-    options;
+export function buildSystemPrompt(
+  ctx: SystemPromptContext,
+  opts: BuildSystemPromptOpts,
+): string {
+  const { identity, memory, skills, threadMeta } = ctx;
+  const { dataDir, sandbox } = opts;
   const { adapterName, channelId, threadId, channelKey, threadKey } =
     threadMeta;
   const channelDir = channelDirFrom(dataDir, adapterName, channelKey);
@@ -53,7 +40,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 ## Context
 - You do NOT know the current time. Run \`date +"%Y-%m-%dT%H:%M:%S%z"\` to get the current time with UTC offset (for one-shot events).
 - You have access to previous conversation context including tool results from prior turns.
-- For older history beyond your context, search log.jsonl or use the search_channel tool.
+- For older history beyond your context, search log.jsonl for full channel history since you were installed.
 
 ## Formatting
 Write standard markdown. The runtime converts to each platform's native format automatically.
@@ -120,7 +107,7 @@ You can schedule events that wake you up at specific times or when external thin
 
 ### Event Types
 
-**Immediate** - Triggers as soon as the runtime sees the file. Use in scripts/webhooks to signal external events.
+**Immediate** - Triggers as soon as the runtime sees the file. Use in scripts/webhooks to signal external events. This can also be used to send messages to other channels/threads.
 \`\`\`json
 {"type": "immediate", "threadId": "${threadId}", "text": "New GitHub issue opened"}
 \`\`\`
@@ -205,7 +192,6 @@ Maintain ${dataDir}/SYSTEM.md to log all environment modifications:
 Update this file whenever you modify the environment. On fresh container, read it first to restore your setup.
 
 ## History Search
-Two ways to search message history:
 
 ### log.jsonl (local file — all channel messages)
 Format: \`{"date":"...","messageId":"...","threadId":"...","userId":"...","userName":"...","text":"...","isBot":false}\`
@@ -225,13 +211,10 @@ grep -i "topic" ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .user
 grep '"userName":"mario"' ${channelDir}/log.jsonl | tail -20 | jq -c '{date: .date[0:19], text}'
 \`\`\`
 
-### search_channel tool (broader channel history)
-Use the search_channel tool to search messages beyond this thread, across the whole channel.
-
 ## Tools
 - **bash**: Run shell commands. Install packages as needed. Primary tool for complex tasks.
 - **read**: Read file contents. Supports line range (offset, limit).
 - **write**: Create or overwrite files. Creates parent directories.
 - **edit**: Surgical string replacement in files. Requires unique match.
-- **upload**: Share a file to the current thread.`;
+- **upload**: Share a file to a thread.`;
 }

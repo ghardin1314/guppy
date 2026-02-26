@@ -1,17 +1,7 @@
-import { ThreadImpl, deriveChannelId } from "chat";
-import type { Adapter, SentMessage, StateAdapter } from "chat";
 import { Actor } from "./actor";
+import { resolveThread } from "./resolve-thread";
 import type { Store } from "./store";
-import type { ActorMessage, AgentFactory, EventTarget, Settings } from "./types";
-
-/** Minimal Chat interface — mirrors Chat's public API. */
-export interface ChatHandle {
-  channel(
-    channelId: string
-  ): { post(text: string): Promise<SentMessage> };
-  getAdapter(name: string): Adapter;
-  getState(): StateAdapter;
-}
+import type { ActorMessage, AgentFactory, ChatHandle, EventTarget, Settings } from "./types";
 
 export interface OrchestratorOptions {
   store: Store;
@@ -42,7 +32,7 @@ export class Orchestrator {
   /** Dispatch an event to a thread or channel. */
   dispatchEvent(target: EventTarget, text: string): void {
     if ("threadId" in target) {
-      const thread = this.resolveThread(target.threadId);
+      const thread = resolveThread(this.chat, target.threadId);
       this.send(target.threadId, { type: "prompt", text, thread });
     } else {
       this.postAndRoute(target.channelId, text).catch(
@@ -63,18 +53,6 @@ export class Orchestrator {
     });
   }
 
-  private resolveThread(threadId: string): ThreadImpl {
-    const adapterName = threadId.split(":")[0];
-    const adapter = this.chat.getAdapter(adapterName);
-    return new ThreadImpl({
-      adapter,
-      id: threadId,
-      channelId: deriveChannelId(adapter, threadId),
-      stateAdapter: this.chat.getState(),
-      isDM: false,
-    });
-  }
-
   private async postAndRoute(
     channelId: string,
     text: string
@@ -83,7 +61,7 @@ export class Orchestrator {
       .channel(channelId)
       .post(text);
 
-    const thread = this.resolveThread(sent.threadId);
+    const thread = resolveThread(this.chat, sent.threadId);
     this.send(sent.threadId, { type: "prompt", text, thread, sentMessage: sent });
   }
 

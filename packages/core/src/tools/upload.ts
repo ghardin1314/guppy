@@ -2,11 +2,13 @@ import { resolve, basename } from "node:path";
 import { Type, type Static } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@mariozechner/pi-agent-core";
 import type { TextContent } from "@mariozechner/pi-ai";
-import type { Thread } from "chat";
+import { resolveThread } from "../resolve-thread";
+import type { ChatHandle } from "../types";
 
 const UploadParams = Type.Object({
   label: Type.String({ description: "Brief description of what you're uploading and why (shown to user)" }),
   path: Type.String({ description: "File path to upload (absolute or relative to workspace)" }),
+  threadId: Type.String({ description: "Thread ID to upload to" }),
   comment: Type.Optional(
     Type.String({ description: "Message to post alongside the file" }),
   ),
@@ -16,12 +18,12 @@ type UploadParams = Static<typeof UploadParams>;
 
 export function createUploadTool(
   workspacePath: string,
-  thread: Thread,
+  chat: ChatHandle,
 ): AgentTool<typeof UploadParams, undefined> {
   return {
     name: "upload",
     label: "Upload File",
-    description: "Upload a file to the current thread.",
+    description: "Upload a file to a thread.",
     parameters: UploadParams,
 
     async execute(
@@ -41,6 +43,7 @@ export function createUploadTool(
       const filename = basename(absPath);
       const mimeType = file.type;
 
+      const thread = resolveThread(chat, params.threadId);
       await thread.post({
         raw: params.comment ?? "",
         files: [{ data, filename, mimeType }],

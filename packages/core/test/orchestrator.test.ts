@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Agent, AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SentMessage, Thread } from "chat";
-import { Orchestrator, type ChatHandle } from "../src/orchestrator";
+import { Orchestrator } from "../src/orchestrator";
+import type { ChatHandle } from "../src/types";
 import { Store } from "../src/store";
 
 function createMockAgent() {
@@ -57,9 +58,7 @@ function createMockThread(id = "thread-1"): Thread {
 
 function createMockChat(): ChatHandle {
   return {
-    channel() {
-      return { async post() { return { threadId: "mock-thread" }; } };
-    },
+    channel: () => ({ post: async () => ({ threadId: "slack:C1:T-mock" }) }) as never,
     getAdapter: (name: string) => ({ name }) as never,
     getState: () => ({}) as never,
   };
@@ -162,15 +161,13 @@ describe("Orchestrator", () => {
       let postedText = "";
 
       const mockChat: ChatHandle = {
-        channel(channelId: string) {
-          return {
-            async post(text: string) {
-              postCalled = true;
-              postedText = text;
-              return { threadId: `slack:${channelId}:T-new` };
-            },
-          };
-        },
+        channel: (channelId: string) => ({
+          post: async (text: string) => {
+            postCalled = true;
+            postedText = text;
+            return { threadId: `slack:${channelId}:T-new` };
+          },
+        }) as never,
         getAdapter: (name: string) => ({ name }) as never,
         getState: () => ({}) as never,
       };
@@ -195,13 +192,9 @@ describe("Orchestrator", () => {
 
       try {
         const mockChat: ChatHandle = {
-          channel() {
-            return {
-              async post() {
-                throw new Error("network failure");
-              },
-            };
-          },
+          channel: () => ({
+            post: async () => { throw new Error("network failure"); },
+          }) as never,
           getAdapter: (name: string) => ({ name }) as never,
           getState: () => ({}) as never,
         };

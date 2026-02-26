@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import type { Agent, AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { Thread } from "chat";
 import { Guppy } from "../src/guppy";
-import type { ChatHandle } from "../src/orchestrator";
+import { Orchestrator } from "../src/orchestrator";
+import { Store } from "../src/store";
+import { EventBus } from "../src/events";
+import type { AgentFactory, ChatHandle } from "../src/types";
 
 function createMockAgent() {
   let listeners: ((e: AgentEvent) => void)[] = [];
@@ -31,11 +34,12 @@ function createMockAgent() {
   } as unknown as Agent;
 }
 
-function createMockThread(id = "thread-1"): Thread {
+function createMockThread(id = "slack:C1:T1"): Thread {
   return {
     id,
-    channelId: "channel-1",
+    channelId: "slack:C1",
     isDM: false,
+    adapter: { name: "slack" },
     recentMessages: [],
     post: mock(async () => ({
       id: `msg-${Date.now()}`,
@@ -51,13 +55,7 @@ function createMockThread(id = "thread-1"): Thread {
 
 function createMockChat(): ChatHandle {
   return {
-    channel() {
-      return {
-        async post() {
-          return { threadId: "mock-thread" };
-        },
-      };
-    },
+    channel: () => ({ post: async () => ({ threadId: "slack:C1:T-mock" }) }) as never,
     getAdapter: (name: string) => ({ name }) as never,
     getState: () => ({}) as never,
   };
@@ -65,7 +63,7 @@ function createMockChat(): ChatHandle {
 
 let dataDir: string;
 let factoryCallIds: string[];
-let agentFactory: (thread: Thread) => Agent;
+let agentFactory: AgentFactory;
 let chat: ChatHandle;
 
 beforeEach(() => {
@@ -83,109 +81,97 @@ afterEach(() => {
 });
 
 describe("Guppy", () => {
-  test("constructor creates store, orchestrator, and eventBus", () => {
-    const guppy = new Guppy({
-      dataDir,
-      agentFactory,
+  // These tests verify routing via Orchestrator with a mock agentFactory,
+  // testing integration between Guppy's components without needing real LLM calls.
+
+  function createTestGuppy(overrides?: { agentFactory?: AgentFactory; chat?: ChatHandle }) {
+    const c = overrides?.chat ?? chat;
+    const store = new Store({ dataDir, getAdapter: (name) => c.getAdapter(name) });
+    const orchestrator = new Orchestrator({
+      store,
+      agentFactory: overrides?.agentFactory ?? agentFactory,
       settings: {},
-      chat,
+      chat: c,
     });
+    const eventsDir = join(dataDir, "events");
+    const eventBus = new EventBus(eventsDir, (target, text) => {
+      orchestrator.dispatchEvent(target, text);
+    });
+    eventBus.start();
+    return { store, orchestrator, eventBus, shutdown: () => { eventBus.stop(); orchestrator.shutdown(); } };
+  }
 
-    expect(guppy.store).toBeDefined();
-    expect(guppy.orchestrator).toBeDefined();
-    expect(guppy.eventBus).toBeDefined();
-    expect(guppy.store.dataDir).toBe(dataDir);
-
-    guppy.shutdown();
+  test("constructor creates store, orchestrator, and eventBus", () => {
+    const g = createTestGuppy();
+    expect(g.store).toBeDefined();
+    expect(g.orchestrator).toBeDefined();
+    expect(g.eventBus).toBeDefined();
+    g.shutdown();
   });
 
   test("send() delegates to orchestrator", async () => {
-    const guppy = new Guppy({
-      dataDir,
-      agentFactory,
-      settings: {},
-      chat,
-    });
+    const g = createTestGuppy();
 
     const thread = createMockThread("slack:C1:T1");
-    guppy.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
+    g.orchestrator.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
     await new Promise((r) => setTimeout(r, 20));
 
     expect(factoryCallIds).toEqual(["slack:C1:T1"]);
 
-    guppy.shutdown();
+    g.shutdown();
   });
 
   test("sendToChannel() delegates to orchestrator", async () => {
     let postCalled = false;
 
     const mockChat: ChatHandle = {
-      channel() {
-        return {
-          async post(text: string) {
-            postCalled = true;
-            return { threadId: "mock-thread" };
-          },
-        };
-      },
+      channel: () => ({
+        post: async (text: string) => {
+          postCalled = true;
+          return { threadId: "slack:C1:T-mock" };
+        },
+      }) as never,
       getAdapter: (name: string) => ({ name }) as never,
       getState: () => ({}) as never,
     };
 
-    const guppy = new Guppy({
-      dataDir,
-      agentFactory,
-      settings: {},
-      chat: mockChat,
-    });
+    const g = createTestGuppy({ chat: mockChat });
 
-    guppy.sendToChannel("slack:C1", "hello");
+    g.orchestrator.sendToChannel("slack:C1", "hello");
     await new Promise((r) => setTimeout(r, 50));
 
     expect(postCalled).toBe(true);
 
-    guppy.shutdown();
+    g.shutdown();
   });
 
   test("shutdown() stops eventBus and orchestrator", async () => {
     const agents: Agent[] = [];
-    const factory = (thread: Thread) => {
+    const factory: AgentFactory = (thread: Thread) => {
       const a = createMockAgent();
       agents.push(a);
       return a;
     };
 
-    const guppy = new Guppy({
-      dataDir,
-      agentFactory: factory,
-      settings: {},
-      chat,
-    });
+    const g = createTestGuppy({ agentFactory: factory });
 
     const thread = createMockThread("slack:C1:T1");
-    guppy.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
+    g.orchestrator.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
     await new Promise((r) => setTimeout(r, 20));
 
-    guppy.shutdown();
+    g.shutdown();
 
     for (const a of agents) {
       expect(a.abort).toHaveBeenCalled();
     }
 
     // Calling shutdown again should not throw
-    guppy.shutdown();
+    g.shutdown();
   });
 
   test("shutdown() is idempotent", () => {
-    const guppy = new Guppy({
-      dataDir,
-      agentFactory,
-      settings: {},
-      chat,
-    });
-
-    // Should not throw
-    guppy.shutdown();
-    guppy.shutdown();
+    const g = createTestGuppy();
+    g.shutdown();
+    g.shutdown();
   });
 });
