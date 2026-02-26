@@ -13,7 +13,7 @@ export interface ChatHandle {
 export interface OrchestratorOptions {
   store: Store;
   agentFactory: AgentFactory;
-  settings?: Settings;
+  settings: Settings;
   chat: ChatHandle;
 }
 
@@ -27,7 +27,7 @@ export class Orchestrator {
   constructor(options: OrchestratorOptions) {
     this.store = options.store;
     this.agentFactory = options.agentFactory;
-    this.settings = options.settings ?? options.store.getSettings();
+    this.settings = options.settings;
     this.chat = options.chat;
   }
 

@@ -1,0 +1,24 @@
+{
+  "name": "@guppy/demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@guppy/core": "workspace:*",
+    "@mariozechner/pi-agent-core": "^0.55.0",
+    "@mariozechner/pi-ai": "^0.55.0",
+    "@orpc/openapi": "^1.4.0",
+    "@orpc/server": "^1.4.0",
+    "chat": "^4.14.0",
+    "@chat-adapter/slack": "^4.14.0",
+    "@chat-adapter/discord": "^4.14.0",
+    "@chat-adapter/state-memory": "^4.14.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

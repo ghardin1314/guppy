@@ -206,27 +206,6 @@ describe("context save/load", () => {
   });
 });
 
-describe("getSettings", () => {
-  test("returns parsed settings", () => {
-    const store = new Store({ dataDir });
-    const settings = { defaultModel: "claude-3", idleTimeoutMs: 5000 };
-    writeFileSync(join(dataDir, "settings.json"), JSON.stringify(settings));
-
-    expect(store.getSettings()).toEqual(settings);
-  });
-
-  test("returns empty object for missing file", () => {
-    const store = new Store({ dataDir });
-    expect(store.getSettings()).toEqual({});
-  });
-
-  test("returns empty object for invalid JSON", () => {
-    const store = new Store({ dataDir });
-    writeFileSync(join(dataDir, "settings.json"), "not json{{{");
-    expect(store.getSettings()).toEqual({});
-  });
-});
-
 describe("downloadAttachment", () => {
   test("downloads file and returns relative path", async () => {
     const store = new Store({ dataDir });

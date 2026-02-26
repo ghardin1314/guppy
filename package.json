@@ -2,7 +2,7 @@
   "name": "guppy-chat",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "build": "turbo build",
     "typecheck": "turbo typecheck",

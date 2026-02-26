@@ -143,7 +143,7 @@ afterEach(() => {
 function createActor(settings = {}) {
   return new Actor(THREAD_ID, {
     store,
-    agentFactory: agentFactory as unknown as (id: string) => Agent,
+    agentFactory: agentFactory as unknown as (thread: Thread) => Agent,
     settings,
   });
 }

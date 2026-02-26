@@ -14,9 +14,10 @@ export interface LogEntry {
   attachments?: Array<{ original: string; local: string }>;
 }
 
+// TODO: How much of this are we actually using?
 export interface Settings {
-  defaultProvider?: string;
-  defaultModel?: string;
+  defaultProvider: string;
+  defaultModel: string;
   defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high";
   compaction?: {
     enabled?: boolean;
@@ -48,7 +49,7 @@ export interface ThreadMeta {
   isDM: boolean;
 }
 
-export type AgentFactory = (threadId: string) => Agent;
+export type AgentFactory = (thread: Thread) => Agent;
 
 // -- Event bus types --
 

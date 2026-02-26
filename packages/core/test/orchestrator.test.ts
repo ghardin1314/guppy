@@ -67,15 +67,15 @@ let dataDir: string;
 let store: Store;
 let chat: ChatHandle;
 let factoryCallIds: string[];
-let agentFactory: (id: string) => Agent;
+let agentFactory: (thread: Thread) => Agent;
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "guppy-orch-"));
   store = new Store({ dataDir });
   chat = createMockChat();
   factoryCallIds = [];
-  agentFactory = (id: string) => {
-    factoryCallIds.push(id);
+  agentFactory = (thread: Thread) => {
+    factoryCallIds.push(thread.id);
     return createMockAgent();
   };
 });
@@ -86,8 +86,8 @@ afterEach(() => {
 
 describe("Orchestrator", () => {
   test("creates actor on demand per threadId", async () => {
-    const orch = new Orchestrator({ store, agentFactory, chat });
-    const thread = createMockThread();
+    const orch = new Orchestrator({ store, agentFactory, chat, settings: {} });
+    const thread = createMockThread("slack:C1:T1");
 
     orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
     await new Promise((r) => setTimeout(r, 20));
@@ -96,8 +96,8 @@ describe("Orchestrator", () => {
   });
 
   test("routes same threadId to same actor", async () => {
-    const orch = new Orchestrator({ store, agentFactory, chat });
-    const thread = createMockThread();
+    const orch = new Orchestrator({ store, agentFactory, chat, settings: {} });
+    const thread = createMockThread("slack:C1:T1");
 
     orch.send("slack:C1:T1", { type: "prompt", text: "first", thread });
     await new Promise((r) => setTimeout(r, 20));
@@ -109,11 +109,12 @@ describe("Orchestrator", () => {
   });
 
   test("different threadIds create different actors", async () => {
-    const orch = new Orchestrator({ store, agentFactory, chat });
-    const thread = createMockThread();
+    const orch = new Orchestrator({ store, agentFactory, chat, settings: {} });
+    const thread1 = createMockThread("slack:C1:T1");
+    const thread2 = createMockThread("slack:C1:T2");
 
-    orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
-    orch.send("slack:C1:T2", { type: "prompt", text: "hi", thread });
+    orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread: thread1 });
+    orch.send("slack:C1:T2", { type: "prompt", text: "hi", thread: thread2 });
     await new Promise((r) => setTimeout(r, 20));
 
     expect(factoryCallIds).toEqual(["slack:C1:T1", "slack:C1:T2"]);
@@ -121,17 +122,16 @@ describe("Orchestrator", () => {
 
   test("shutdown destroys all actors", async () => {
     const agents: Agent[] = [];
-    const factory = (id: string) => {
+    const factory = (thread: Thread) => {
       const a = createMockAgent();
       agents.push(a);
       return a;
     };
 
-    const orch = new Orchestrator({ store, agentFactory: factory, chat });
-    const thread = createMockThread();
+    const orch = new Orchestrator({ store, agentFactory: factory, chat, settings: {} });
 
-    orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
-    orch.send("slack:C1:T2", { type: "prompt", text: "hi", thread });
+    orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread: createMockThread("slack:C1:T1") });
+    orch.send("slack:C1:T2", { type: "prompt", text: "hi", thread: createMockThread("slack:C1:T2") });
     await new Promise((r) => setTimeout(r, 20));
 
     orch.shutdown();
@@ -171,7 +171,7 @@ describe("Orchestrator", () => {
         },
       };
 
-      const orch = new Orchestrator({ store, agentFactory, chat: mockChat });
+      const orch = new Orchestrator({ store, agentFactory, chat: mockChat, settings: {} });
       orch.sendToChannel("slack", "C1", "hello channel");
 
       await new Promise((r) => setTimeout(r, 50));
@@ -204,6 +204,7 @@ describe("Orchestrator", () => {
           store,
           agentFactory,
           chat: mockChat,
+          settings: {},
         });
         orch.sendToChannel("slack", "C1", "hello");
 

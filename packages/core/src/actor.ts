@@ -238,7 +238,7 @@ export class Actor {
       this.runMessage = msg;
 
       try {
-        this.activate();
+        this.activate(item.thread);
 
         const context = this.deps.store.loadContext(this.threadId);
         this.agent!.replaceMessages(context);
@@ -261,9 +261,9 @@ export class Actor {
 
   // -- Event handling (single subscription per agent lifetime) --
 
-  private activate(): void {
+  private activate(thread: Thread): void {
     if (!this.agent) {
-      this.agent = this.deps.agentFactory(this.threadId);
+      this.agent = this.deps.agentFactory(thread);
       this.unsub = this.agent.subscribe((e) => this.handleAgentEvent(e));
     }
   }

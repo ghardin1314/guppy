@@ -9,7 +9,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Message } from "chat";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { LogEntry, Settings, StoreOptions } from "./types";
+import type { LogEntry, StoreOptions } from "./types";
 import { encode, parseThreadId } from "./encode";
 
 export class Store {
@@ -111,15 +111,6 @@ export class Store {
     const absPath = join(attDir, safeName);
     await this.downloadToFile(url, absPath);
     return join("attachments", safeName);
-  }
-
-  getSettings(): Settings {
-    const file = join(this.dataDir, "settings.json");
-    try {
-      return JSON.parse(readFileSync(file, "utf-8")) as Settings;
-    } catch {
-      return {};
-    }
   }
 
   private ensureDir(dir: string): void {
