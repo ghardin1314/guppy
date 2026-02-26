@@ -3,6 +3,15 @@ import type { Adapter, Message, SentMessage, StateAdapter, Thread } from "chat";
 import type { ChannelKey, ThreadKey } from "./encode";
 import type { Skill } from "./skills";
 export type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
+export type {
+  AssistantMessage,
+  TextContent,
+  ThinkingContent,
+  ToolCall,
+  ToolResultMessage,
+  Usage,
+  UserMessage,
+} from "@mariozechner/pi-ai";
 export type { Message, SentMessage, Thread } from "chat";
 
 /** Minimal Chat interface — mirrors Chat's public API. */
@@ -36,6 +45,7 @@ export interface Settings {
   };
   idleTimeoutMs?: number;
   maxQueueDepth?: number;
+  inspectUrl?: (threadId: string) => string;
 }
 
 export interface StoreOptions {

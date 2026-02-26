@@ -10,6 +10,7 @@ import { formatMemory } from "./memory";
 import { Orchestrator } from "./orchestrator";
 import { loadSkills } from "./skills";
 import { Store } from "./store";
+import { createInspectUrl, verifySignature } from "./signing";
 import type {
   ActorMessage,
   AgentFactory,
@@ -42,6 +43,10 @@ export interface GuppyOptions {
   chat: ChatHandle;
   agent: AgentConfig;
   settings?: Settings;
+  /** HMAC secret for signed URLs. Falls back to GUPPY_SECRET env var. */
+  secret?: string;
+  /** External base URL (e.g. "https://bot.example.com"). Requires secret. */
+  baseUrl?: string;
 }
 
 /** Build the internal AgentFactory from declarative config. */
@@ -91,9 +96,20 @@ export class Guppy {
   readonly store: Store;
   readonly orchestrator: Orchestrator;
   readonly eventBus: EventBus;
+  private readonly secret: string | undefined;
 
   constructor(options: GuppyOptions) {
     const { dataDir, chat, agent, settings = {} } = options;
+
+    this.secret = options.secret ?? process.env.GUPPY_SECRET;
+
+    if (options.baseUrl && !this.secret) {
+      throw new Error("baseUrl requires a secret (pass secret option or set GUPPY_SECRET)");
+    }
+
+    if (this.secret && options.baseUrl) {
+      settings.inspectUrl = createInspectUrl(options.baseUrl, this.secret);
+    }
 
     this.store = new Store({
       dataDir,
@@ -113,6 +129,12 @@ export class Guppy {
     });
 
     this.eventBus.start();
+  }
+
+  /** Verify an HMAC signature for a thread inspect URL. */
+  verifyInspect(threadId: string, sig: string): boolean {
+    if (!this.secret) return false;
+    return verifySignature(this.secret, threadId, sig);
   }
 
   send(threadId: string, message: ActorMessage): void {

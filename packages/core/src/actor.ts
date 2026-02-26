@@ -266,7 +266,11 @@ export class Actor {
         await this.agent!.prompt(promptText, images);
         this.deps.store.saveContext(this.threadId, this.agent!.state.messages);
         const finalText = this.extractFinalText();
-        msg.finish(finalText);
+        const inspectLink = this.deps.settings.inspectUrl?.(this.threadId);
+        const displayText = inspectLink
+          ? `${finalText}\n\n[Inspect thread](${inspectLink})`
+          : finalText;
+        msg.finish(displayText);
         this.deps.store.logBotResponse(this.threadId, finalText);
       } catch (err) {
         console.error(`[Actor:${this.threadId}]`, err);

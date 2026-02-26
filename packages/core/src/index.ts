@@ -20,6 +20,7 @@ export { resolveThread } from "./resolve-thread";
 export { createHostSandbox } from "./sandbox";
 export type { ExecOptions, ExecResult, Sandbox } from "./sandbox";
 export { sanitizeOutput, stripAnsi } from "./sanitize";
+export { signData, verifySignature } from "./signing";
 export { formatSkillsForPrompt, loadSkills } from "./skills";
 export type { Skill } from "./skills";
 export { Store } from "./store";
@@ -38,6 +39,7 @@ export type {
   Agent,
   AgentFactory,
   AgentMessage,
+  AssistantMessage,
   ChannelTarget,
   ChatHandle,
   EventDispatch,
@@ -52,7 +54,13 @@ export type {
   Settings,
   StoreOptions,
   SystemPromptContext,
+  TextContent,
+  ThinkingContent,
   Thread,
   ThreadMeta,
   ThreadTarget,
+  ToolCall,
+  ToolResultMessage,
+  Usage,
+  UserMessage,
 } from "./types";

@@ -13,6 +13,7 @@ import {
 import { getModel } from "@mariozechner/pi-ai";
 import { Chat } from "chat";
 import { join } from "node:path";
+import { handleInspectRequest } from "./inspect";
 import { buildSystemPrompt } from "./system-prompt";
 
 // -- Config --
@@ -20,6 +21,7 @@ import { buildSystemPrompt } from "./system-prompt";
 const DATA_DIR = join(import.meta.dir, "..", "data");
 const PORT = Number(process.env.PORT) || 3000;
 const BOT_NAME = "Guppy Local";
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 // -- Core wiring --
 
@@ -50,6 +52,7 @@ const guppy = new Guppy({
     ],
     systemPrompt: (ctx) => buildSystemPrompt(ctx, { dataDir: DATA_DIR, sandbox }),
   },
+  baseUrl: BASE_URL,
 });
 
 // -- Chat handlers --
@@ -125,6 +128,7 @@ const server = Bun.serve({
       if (!handler) return new Response("Not Found", { status: 404 });
       return handler(request);
     },
+    "/inspect/*": (req) => handleInspectRequest(req, guppy),
   },
 });
 
