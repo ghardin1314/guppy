@@ -65,6 +65,33 @@ export class Orchestrator {
     this.send(sent.threadId, { type: "prompt", text, thread, sentMessage: sent });
   }
 
+  /**
+   * Send a control message (abort/steer) to an existing actor.
+   * Unlike send(), does NOT create an actor if none exists.
+   */
+  sendCommand(threadId: string, message: ActorMessage): boolean {
+    const actor = this.actors.get(threadId);
+    if (!actor) return false;
+    actor.receive(message);
+    return true;
+  }
+
+  /**
+   * Broadcast a control message to all actors whose threadId starts with
+   * the given channel prefix (e.g. "discord:123456:").
+   * Returns the number of actors that received the message.
+   */
+  broadcastCommand(channelPrefix: string, message: ActorMessage): number {
+    let count = 0;
+    for (const [threadId, actor] of this.actors) {
+      if (threadId.startsWith(channelPrefix)) {
+        actor.receive(message);
+        count++;
+      }
+    }
+    return count;
+  }
+
   shutdown(): void {
     for (const actor of this.actors.values()) {
       actor.destroy();

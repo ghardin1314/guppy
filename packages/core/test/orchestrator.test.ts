@@ -155,6 +155,93 @@ describe("Orchestrator", () => {
     orch.shutdown();
   });
 
+  describe("sendCommand", () => {
+    test("sends to existing actor, returns true", async () => {
+      const agents: Agent[] = [];
+      const factory = (thread: Thread) => {
+        const a = createMockAgent();
+        // Make prompt hang so actor stays in running state
+        a.prompt = mock(() => new Promise(() => {}));
+        agents.push(a);
+        return a;
+      };
+
+      const orch = new Orchestrator({ store, agentFactory: factory, chat, settings: {} });
+      const thread = createMockThread("slack:C1:T1");
+
+      orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
+      await new Promise((r) => setTimeout(r, 20));
+
+      const result = orch.sendCommand("slack:C1:T1", { type: "abort" });
+      expect(result).toBe(true);
+      expect(agents[0].abort).toHaveBeenCalled();
+
+      orch.shutdown();
+    });
+
+    test("returns false when no actor exists", () => {
+      const orch = new Orchestrator({ store, agentFactory, chat, settings: {} });
+
+      const result = orch.sendCommand("slack:C1:nonexistent", { type: "abort" });
+      expect(result).toBe(false);
+
+      // No actor created
+      expect(factoryCallIds).toEqual([]);
+
+      orch.shutdown();
+    });
+
+    test("does not create a new actor", () => {
+      const orch = new Orchestrator({ store, agentFactory, chat, settings: {} });
+
+      orch.sendCommand("slack:C1:T1", { type: "abort" });
+
+      expect(factoryCallIds).toEqual([]);
+
+      orch.shutdown();
+    });
+  });
+
+  describe("broadcastCommand", () => {
+    test("sends to all actors matching channel prefix", async () => {
+      const agents: Agent[] = [];
+      const factory = (thread: Thread) => {
+        const a = createMockAgent();
+        a.prompt = mock(() => new Promise(() => {}));
+        agents.push(a);
+        return a;
+      };
+
+      const orch = new Orchestrator({ store, agentFactory: factory, chat, settings: {} });
+
+      // Create two actors in same channel, one in different channel
+      orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread: createMockThread("slack:C1:T1") });
+      orch.send("slack:C1:T2", { type: "prompt", text: "hi", thread: createMockThread("slack:C1:T2") });
+      orch.send("slack:C2:T3", { type: "prompt", text: "hi", thread: createMockThread("slack:C2:T3") });
+      await new Promise((r) => setTimeout(r, 20));
+
+      const count = orch.broadcastCommand("slack:C1:", { type: "abort" });
+      expect(count).toBe(2);
+
+      // C1 actors aborted
+      expect(agents[0].abort).toHaveBeenCalled();
+      expect(agents[1].abort).toHaveBeenCalled();
+      // C2 actor not aborted
+      expect(agents[2].abort).not.toHaveBeenCalled();
+
+      orch.shutdown();
+    });
+
+    test("returns 0 when no actors match", () => {
+      const orch = new Orchestrator({ store, agentFactory, chat, settings: {} });
+
+      const count = orch.broadcastCommand("slack:C999:", { type: "abort" });
+      expect(count).toBe(0);
+
+      orch.shutdown();
+    });
+  });
+
   describe("sendToChannel", () => {
     test("posts to channel via chat and routes to actor", async () => {
       let postCalled = false;

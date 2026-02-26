@@ -83,6 +83,12 @@ chat.onNewMessage(/.*/, (thread, message) => {
   guppy.logPassiveMessage(thread.id, message);
 });
 
+// -- Slash commands (platform-native, e.g. Slack /commands) --
+
+chat.onSlashCommand(async (event) => {
+  guppy.handleSlashCommand(event);
+});
+
 // -- Discord Gateway --
 // Connects the WebSocket for regular messages & reactions.
 // (HTTP interactions alone only handle slash commands & verification pings.)

@@ -1,5 +1,11 @@
 export { Actor, describeError, isTransportRetryable } from "./actor";
 export {
+  BUILT_IN_COMMANDS,
+  commandToMessage,
+  parseCommand,
+} from "./commands";
+export type { SlashCommandDef } from "./commands";
+export {
   adapterNameFrom,
   channelDir,
   decode,

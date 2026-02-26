@@ -11,6 +11,7 @@ import { Orchestrator } from "./orchestrator";
 import { loadSkills } from "./skills";
 import { Store } from "./store";
 import { createInspectUrl, verifySignature } from "./signing";
+import { commandToMessage } from "./commands";
 import type {
   ActorMessage,
   AgentFactory,
@@ -139,6 +140,20 @@ export class Guppy {
 
   send(threadId: string, message: ActorMessage): void {
     this.orchestrator.send(threadId, message);
+  }
+
+  /**
+   * Handle a platform slash command event (from chat.onSlashCommand).
+   * Broadcasts to all active actors in the event's channel.
+   */
+  handleSlashCommand(event: {
+    channel: { id: string };
+    command: string;
+    text: string;
+  }): boolean {
+    const msg = commandToMessage(event.command, event.text);
+    if (!msg) return false;
+    return this.orchestrator.broadcastCommand(event.channel.id + ":", msg) > 0;
   }
 
   /** Full log + attachment download — use for active threads. */

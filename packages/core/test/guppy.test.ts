@@ -174,4 +174,48 @@ describe("Guppy", () => {
     g.shutdown();
     g.shutdown();
   });
+
+  describe("handleSlashCommand", () => {
+    test("/stop aborts all actors in channel", async () => {
+      const agents: Agent[] = [];
+      const factory: AgentFactory = (thread: Thread) => {
+        const a = createMockAgent();
+        // Make prompt hang so actor stays running
+        a.prompt = mock(() => new Promise(() => {}));
+        agents.push(a);
+        return a;
+      };
+
+      const g = createTestGuppy({ agentFactory: factory });
+
+      g.orchestrator.send("slack:C1:T1", {
+        type: "prompt",
+        text: "hi",
+        thread: createMockThread("slack:C1:T1"),
+      });
+      g.orchestrator.send("slack:C1:T2", {
+        type: "prompt",
+        text: "hi",
+        thread: createMockThread("slack:C1:T2"),
+      });
+      await new Promise((r) => setTimeout(r, 20));
+
+      const result = g.orchestrator.broadcastCommand("slack:C1:", { type: "abort" });
+      expect(result).toBe(2);
+      expect(agents[0].abort).toHaveBeenCalled();
+      expect(agents[1].abort).toHaveBeenCalled();
+
+      g.shutdown();
+    });
+
+    test("returns false for unknown command", () => {
+      const g = createTestGuppy();
+
+      const { commandToMessage } = require("../src/commands");
+      const msg = commandToMessage("unknown", "");
+      expect(msg).toBeNull();
+
+      g.shutdown();
+    });
+  });
 });
