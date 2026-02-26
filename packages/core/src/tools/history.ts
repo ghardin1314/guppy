@@ -4,6 +4,7 @@ import type { TextContent } from "@mariozechner/pi-ai";
 import type { Thread } from "chat";
 
 const HistoryParams = Type.Object({
+  label: Type.String({ description: "Brief description of what you're looking for (shown to user)" }),
   limit: Type.Optional(
     Type.Number({ description: "Number of recent messages to fetch (default 20, max 100)" }),
   ),

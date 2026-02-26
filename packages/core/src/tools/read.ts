@@ -5,6 +5,7 @@ import type { TextContent, ImageContent } from "@mariozechner/pi-ai";
 import { truncateHead } from "../truncate";
 
 const ReadParams = Type.Object({
+  label: Type.String({ description: "Brief description of what you're reading and why (shown to user)" }),
   path: Type.String({ description: "File path (absolute or relative to workspace)" }),
   offset: Type.Optional(
     Type.Number({ description: "Start line (1-indexed)" }),

@@ -1,6 +1,7 @@
 import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
+import type { ImageContent } from "@mariozechner/pi-ai";
 import { RateLimitError } from "chat";
-import type { SentMessage, Thread } from "chat";
+import type { Message, SentMessage, Thread } from "chat";
 import type { Store } from "./store";
 import type { ActorMessage, AgentFactory, Settings } from "./types";
 
@@ -176,6 +177,7 @@ interface ActorDeps {
 interface PromptItem {
   text: string;
   thread: Thread;
+  message?: Message;
 }
 
 const DEFAULT_MAX_QUEUE_DEPTH = 20;
@@ -206,7 +208,7 @@ export class Actor {
             .catch(() => {});
           return;
         }
-        this.queue.push({ text: msg.text, thread: msg.thread });
+        this.queue.push({ text: msg.text, thread: msg.thread, message: msg.message });
         if (!this.running) {
           this.drainQueue();
         }
@@ -238,12 +240,29 @@ export class Actor {
       this.runMessage = msg;
 
       try {
+        // Log message & await attachment downloads before prompting
+        if (item.message) {
+          await this.deps.store.logMessage(this.threadId, item.message);
+        }
+
         this.activate(item.thread);
 
         const context = this.deps.store.loadContext(this.threadId);
         this.agent!.replaceMessages(context);
 
-        await this.agent!.prompt(item.text);
+        // Load image and file attachments from disk
+        let promptText = item.text;
+        let images: ImageContent[] | undefined;
+
+        if (item.message?.attachments?.length) {
+          const att = this.deps.store.loadAttachments(this.threadId, item.message.id);
+          if (att.images.length > 0) images = att.images;
+          if (att.filePaths.length > 0) {
+            promptText += `\n\n<attachments>\n${att.filePaths.join("\n")}\n</attachments>`;
+          }
+        }
+
+        await this.agent!.prompt(promptText, images);
         this.deps.store.saveContext(this.threadId, this.agent!.state.messages);
         msg.finish(this.extractFinalText());
       } catch (err) {
@@ -290,9 +309,11 @@ export class Actor {
         // Final text extracted from agent.state.messages after prompt() resolves
         break;
 
-      case "tool_execution_start":
-        msg.toolStart(event.toolName);
+      case "tool_execution_start": {
+        const toolLabel = (event.args as { label?: string })?.label ?? event.toolName;
+        msg.toolStart(toolLabel);
         break;
+      }
 
       case "tool_execution_update":
         break;
@@ -318,6 +339,10 @@ export class Actor {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if ("role" in m && m.role === "assistant" && Array.isArray(m.content)) {
+        // Surface API errors that agent.prompt() doesn't throw
+        if ("stopReason" in m && m.stopReason === "error" && "errorMessage" in m) {
+          return describeError(new Error(m.errorMessage as string));
+        }
         return (
           m.content
             .filter(

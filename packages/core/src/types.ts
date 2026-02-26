@@ -11,7 +11,7 @@ export interface LogEntry {
   userName: string;
   text: string;
   isBot: boolean;
-  attachments?: Array<{ original: string; local: string }>;
+  attachments?: Array<{ original: string; local: string; mimeType?: string }>;
 }
 
 // TODO: How much of this are we actually using?

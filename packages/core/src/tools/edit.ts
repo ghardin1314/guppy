@@ -4,6 +4,7 @@ import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@mario
 import type { TextContent } from "@mariozechner/pi-ai";
 
 const EditParams = Type.Object({
+  label: Type.String({ description: "Brief description of what you're editing and why (shown to user)" }),
   path: Type.String({ description: "File path (absolute or relative to workspace)" }),
   old_string: Type.String({ description: "Exact string to find and replace" }),
   new_string: Type.String({ description: "Replacement string" }),

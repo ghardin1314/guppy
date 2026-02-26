@@ -5,6 +5,7 @@ import type { TextContent } from "@mariozechner/pi-ai";
 import type { Thread } from "chat";
 
 const UploadParams = Type.Object({
+  label: Type.String({ description: "Brief description of what you're uploading and why (shown to user)" }),
   path: Type.String({ description: "File path to upload (absolute or relative to workspace)" }),
   comment: Type.Optional(
     Type.String({ description: "Message to post alongside the file" }),

@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
@@ -9,8 +10,25 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Message } from "chat";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { ImageContent } from "@mariozechner/pi-ai";
 import type { LogEntry, StoreOptions } from "./types";
 import { encode, parseThreadId } from "./encode";
+
+export interface LoadedAttachments {
+  images: ImageContent[];
+  filePaths: string[];
+}
+
+/** Detect actual image MIME from magic bytes (platforms like Discord may lie). */
+function detectImageMime(buf: Buffer): string | undefined {
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "image/jpeg";
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return "image/gif";
+  // RIFF....WEBP
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "image/webp";
+  return undefined;
+}
 
 export class Store {
   readonly dataDir: string;
@@ -34,7 +52,7 @@ export class Store {
     return join(this.dataDir, adapter);
   }
 
-  logMessage(compositeId: string, message: Message): void {
+  async logMessage(compositeId: string, message: Message): Promise<void> {
     const dir = this.threadDir(compositeId);
     this.ensureDir(dir);
 
@@ -47,18 +65,20 @@ export class Store {
       isBot: message.author.isBot === true || message.author.isMe,
     };
 
-    // Kick off attachment downloads (fire-and-forget)
-    const attachmentEntries: Array<{ original: string; local: string }> = [];
+    const attachmentEntries: Array<{ original: string; local: string; mimeType?: string }> = [];
+    const downloads: Promise<void>[] = [];
     for (const att of message.attachments) {
       if (att.url) {
         const filename = att.name ?? "attachment";
         const localName = `${Date.now()}_${this.sanitizeFilename(filename)}`;
         const localPath = join("attachments", localName);
-        attachmentEntries.push({ original: att.url, local: localPath });
+        attachmentEntries.push({ original: att.url, local: localPath, mimeType: att.mimeType });
 
         const absPath = join(dir, localPath);
-        this.downloadToFile(att.url, absPath, att.fetchData).catch((err) =>
-          console.warn(`Attachment download failed: ${att.url}`, err)
+        downloads.push(
+          this.downloadToFile(att.url, absPath, att.fetchData).catch((err) =>
+            console.warn(`Attachment download failed: ${att.url}`, err)
+          )
         );
       }
     }
@@ -73,16 +93,81 @@ export class Store {
     } catch (err) {
       console.warn("Failed to append to log.jsonl", err);
     }
+
+    if (downloads.length > 0) {
+      await Promise.all(downloads);
+    }
+  }
+
+  loadAttachments(compositeId: string, messageId: string): LoadedAttachments {
+    const result: LoadedAttachments = { images: [], filePaths: [] };
+    const entry = this.findLogEntry(compositeId, messageId);
+    if (!entry?.attachments) return result;
+
+    const threadDir = this.threadDir(compositeId);
+    for (const att of entry.attachments) {
+      const fullPath = join(threadDir, att.local);
+      if (!existsSync(fullPath)) continue;
+
+      if (att.mimeType?.startsWith("image/")) {
+        try {
+          const data = readFileSync(fullPath);
+          const mimeType = detectImageMime(data) ?? att.mimeType;
+          result.images.push({
+            type: "image",
+            mimeType,
+            data: data.toString("base64"),
+          });
+        } catch {
+          result.filePaths.push(fullPath);
+        }
+      } else {
+        result.filePaths.push(fullPath);
+      }
+    }
+    return result;
+  }
+
+  private findLogEntry(compositeId: string, messageId: string): LogEntry | undefined {
+    const file = join(this.threadDir(compositeId), "log.jsonl");
+    try {
+      const content = readFileSync(file, "utf-8");
+      const lines = content.split("\n").filter((l) => l.trim() !== "");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const entry = JSON.parse(lines[i]) as LogEntry;
+        if (entry.messageId === messageId) return entry;
+      }
+    } catch {
+      // log file doesn't exist yet
+    }
+    return undefined;
   }
 
   loadContext(compositeId: string): AgentMessage[] {
     const file = join(this.threadDir(compositeId), "context.jsonl");
     try {
       const content = readFileSync(file, "utf-8");
-      return content
+      const messages = content
         .split("\n")
         .filter((line) => line.trim() !== "")
         .map((line) => JSON.parse(line) as AgentMessage);
+
+      // Trim trailing error sequences (error assistant + its preceding user message)
+      while (messages.length > 0) {
+        const last = messages[messages.length - 1];
+        if ("role" in last && last.role === "assistant" && "stopReason" in last && last.stopReason === "error") {
+          messages.pop();
+          // Also remove the user message that triggered the error
+          const prev = messages[messages.length - 1];
+          if (prev && "role" in prev && prev.role === "user") {
+            messages.pop();
+          }
+          continue;
+        }
+        break;
+      }
+
+      return messages;
     } catch {
       return [];
     }

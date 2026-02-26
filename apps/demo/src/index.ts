@@ -43,7 +43,6 @@ const guppy = new Guppy({ dataDir: DATA_DIR, agentFactory, settings, chat });
 
 chat.onNewMention(async (thread, message) => {
   await thread.subscribe();
-  guppy.store.logMessage(thread.id, message);
   guppy.send(thread.id, {
     type: "prompt",
     text: message.text,
@@ -54,7 +53,6 @@ chat.onNewMention(async (thread, message) => {
 
 chat.onSubscribedMessage(async (thread, message) => {
   if (message.author.isMe) return;
-  guppy.store.logMessage(thread.id, message);
   guppy.send(thread.id, {
     type: "prompt",
     text: message.text,
@@ -72,7 +70,14 @@ await chat.initialize();
 const discord = chat.getAdapter("discord");
 
 const GATEWAY_CYCLE = 12 * 60 * 60 * 1000; // 12h
-await discord.startGatewayListener({ waitUntil: () => {} }, GATEWAY_CYCLE);
+await discord
+  .startGatewayListener({ waitUntil: () => {} }, GATEWAY_CYCLE)
+  .then(() => {
+    console.log("Gateway connected");
+  })
+  .catch((error) => {
+    console.error("Error connecting gateway:", error);
+  });
 setInterval(() => {
   discord
     .startGatewayListener({ waitUntil: () => {} }, GATEWAY_CYCLE)

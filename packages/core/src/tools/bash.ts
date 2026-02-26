@@ -4,6 +4,7 @@ import type { TextContent } from "@mariozechner/pi-ai";
 import type { Sandbox } from "../sandbox";
 
 const BashParams = Type.Object({
+  label: Type.String({ description: "Brief description of what this command does (shown to user)" }),
   command: Type.String({ description: "The bash command to execute" }),
   timeout: Type.Optional(
     Type.Number({ description: "Timeout in seconds (default 120)" }),

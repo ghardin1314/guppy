@@ -5,6 +5,7 @@ import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@mario
 import type { TextContent } from "@mariozechner/pi-ai";
 
 const WriteParams = Type.Object({
+  label: Type.String({ description: "Brief description of what you're writing and why (shown to user)" }),
   path: Type.String({ description: "File path (absolute or relative to workspace)" }),
   content: Type.String({ description: "File content to write" }),
 });
