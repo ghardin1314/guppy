@@ -43,6 +43,7 @@ const guppy = new Guppy({ dataDir: DATA_DIR, agentFactory, settings, chat });
 
 chat.onNewMention(async (thread, message) => {
   await thread.subscribe();
+  await guppy.logMessage(thread.id, message);
   guppy.send(thread.id, {
     type: "prompt",
     text: message.text,
@@ -53,12 +54,17 @@ chat.onNewMention(async (thread, message) => {
 
 chat.onSubscribedMessage(async (thread, message) => {
   if (message.author.isMe) return;
+  await guppy.logMessage(thread.id, message);
   guppy.send(thread.id, {
     type: "prompt",
     text: message.text,
     thread,
     message,
   });
+});
+
+chat.onNewMessage(/.*/, (thread, message) => {
+  guppy.logPassiveMessage(thread.id, message);
 });
 
 // -- Discord Gateway --

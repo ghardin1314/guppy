@@ -53,12 +53,18 @@ export class Store {
   }
 
   async logMessage(compositeId: string, message: Message): Promise<void> {
-    const dir = this.threadDir(compositeId);
-    this.ensureDir(dir);
+    const chanDir = this.channelDir(compositeId);
+    const threadDir = this.threadDir(compositeId);
+    this.ensureDir(chanDir);
+    this.ensureDir(threadDir);
+
+    const { threadId: rawThreadId } = parseThreadId(compositeId);
+    const encodedThreadId = encode(rawThreadId);
 
     const entry: LogEntry = {
       date: message.metadata.dateSent.toISOString(),
       messageId: message.id,
+      threadId: compositeId,
       userId: message.author.userId,
       userName: message.author.fullName,
       text: message.text,
@@ -71,10 +77,11 @@ export class Store {
       if (att.url) {
         const filename = att.name ?? "attachment";
         const localName = `${Date.now()}_${this.sanitizeFilename(filename)}`;
-        const localPath = join("attachments", localName);
+        // Attachments stored in threadDir, path relative to channelDir
+        const localPath = join(encodedThreadId, "attachments", localName);
         attachmentEntries.push({ original: att.url, local: localPath, mimeType: att.mimeType });
 
-        const absPath = join(dir, localPath);
+        const absPath = join(chanDir, localPath);
         downloads.push(
           this.downloadToFile(att.url, absPath, att.fetchData).catch((err) =>
             console.warn(`Attachment download failed: ${att.url}`, err)
@@ -89,7 +96,7 @@ export class Store {
 
     const line = JSON.stringify(entry) + "\n";
     try {
-      appendFileSync(join(dir, "log.jsonl"), line);
+      appendFileSync(join(chanDir, "log.jsonl"), line);
     } catch (err) {
       console.warn("Failed to append to log.jsonl", err);
     }
@@ -104,9 +111,9 @@ export class Store {
     const entry = this.findLogEntry(compositeId, messageId);
     if (!entry?.attachments) return result;
 
-    const threadDir = this.threadDir(compositeId);
+    const chanDir = this.channelDir(compositeId);
     for (const att of entry.attachments) {
-      const fullPath = join(threadDir, att.local);
+      const fullPath = join(chanDir, att.local);
       if (!existsSync(fullPath)) continue;
 
       if (att.mimeType?.startsWith("image/")) {
@@ -128,8 +135,11 @@ export class Store {
     return result;
   }
 
+  // TODO: reads entire file into memory — fine up to ~50-100MB (~1 year of busy
+  // channel traffic at ~9MB/month), but should be replaced with streaming/grep-based
+  // lookup if the file grows large.
   private findLogEntry(compositeId: string, messageId: string): LogEntry | undefined {
-    const file = join(this.threadDir(compositeId), "log.jsonl");
+    const file = join(this.channelDir(compositeId), "log.jsonl");
     try {
       const content = readFileSync(file, "utf-8");
       const lines = content.split("\n").filter((l) => l.trim() !== "");
@@ -188,14 +198,62 @@ export class Store {
     url: string,
     filename: string
   ): Promise<string> {
-    const dir = this.threadDir(compositeId);
-    const attDir = join(dir, "attachments");
+    const { threadId: rawThreadId } = parseThreadId(compositeId);
+    const encodedThreadId = encode(rawThreadId);
+    const chanDir = this.channelDir(compositeId);
+    const attDir = join(chanDir, encodedThreadId, "attachments");
     this.ensureDir(attDir);
 
     const safeName = `${Date.now()}_${this.sanitizeFilename(filename)}`;
     const absPath = join(attDir, safeName);
     await this.downloadToFile(url, absPath);
-    return join("attachments", safeName);
+    return join(encodedThreadId, "attachments", safeName);
+  }
+
+  /** Passive logging — logs to channel log without downloading attachments. */
+  logChannelMessage(compositeId: string, message: Message): void {
+    const chanDir = this.channelDir(compositeId);
+    this.ensureDir(chanDir);
+
+    const entry: LogEntry = {
+      date: message.metadata.dateSent.toISOString(),
+      messageId: message.id,
+      threadId: compositeId,
+      userId: message.author.userId,
+      userName: message.author.fullName,
+      text: message.text,
+      isBot: message.author.isBot === true || message.author.isMe,
+    };
+
+    const line = JSON.stringify(entry) + "\n";
+    try {
+      appendFileSync(join(chanDir, "log.jsonl"), line);
+    } catch (err) {
+      console.warn("Failed to append to log.jsonl", err);
+    }
+  }
+
+  /** Log a bot response to the channel log. */
+  logBotResponse(compositeId: string, text: string): void {
+    const chanDir = this.channelDir(compositeId);
+    this.ensureDir(chanDir);
+
+    const entry: LogEntry = {
+      date: new Date().toISOString(),
+      messageId: `bot-${Date.now()}`,
+      threadId: compositeId,
+      userId: "bot",
+      userName: "bot",
+      text,
+      isBot: true,
+    };
+
+    const line = JSON.stringify(entry) + "\n";
+    try {
+      appendFileSync(join(chanDir, "log.jsonl"), line);
+    } catch (err) {
+      console.warn("Failed to append bot response to log.jsonl", err);
+    }
   }
 
   private ensureDir(dir: string): void {

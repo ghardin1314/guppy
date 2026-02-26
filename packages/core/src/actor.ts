@@ -240,11 +240,6 @@ export class Actor {
       this.runMessage = msg;
 
       try {
-        // Log message & await attachment downloads before prompting
-        if (item.message) {
-          await this.deps.store.logMessage(this.threadId, item.message);
-        }
-
         this.activate(item.thread);
 
         const context = this.deps.store.loadContext(this.threadId);
@@ -264,7 +259,9 @@ export class Actor {
 
         await this.agent!.prompt(promptText, images);
         this.deps.store.saveContext(this.threadId, this.agent!.state.messages);
-        msg.finish(this.extractFinalText());
+        const finalText = this.extractFinalText();
+        msg.finish(finalText);
+        this.deps.store.logBotResponse(this.threadId, finalText);
       } catch (err) {
         console.error(`[Actor:${this.threadId}]`, err);
         msg.error(describeError(err));

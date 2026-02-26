@@ -78,15 +78,16 @@ describe("path resolution", () => {
 });
 
 describe("logMessage", () => {
-  test("appends JSONL entry to log.jsonl", () => {
+  test("appends JSONL entry to channel-level log.jsonl", () => {
     const store = new Store({ dataDir });
     const msg = makeMessage("msg-1", "Hello world");
     store.logMessage(THREAD_ID, msg);
 
-    const logPath = join(store.threadDir(THREAD_ID), "log.jsonl");
+    const logPath = join(store.channelDir(THREAD_ID), "log.jsonl");
     const content = readFileSync(logPath, "utf-8");
     const entry = JSON.parse(content.trim());
     expect(entry.messageId).toBe("msg-1");
+    expect(entry.threadId).toBe(THREAD_ID);
     expect(entry.text).toBe("Hello world");
     expect(entry.userId).toBe("U123");
     expect(entry.userName).toBe("Test User");
@@ -99,7 +100,7 @@ describe("logMessage", () => {
     store.logMessage(THREAD_ID, makeMessage("b1", "Bot msg", { isBot: true }));
     store.logMessage(THREAD_ID, makeMessage("b2", "Me msg", { isMe: true }));
 
-    const lines = readFileSync(join(store.threadDir(THREAD_ID), "log.jsonl"), "utf-8")
+    const lines = readFileSync(join(store.channelDir(THREAD_ID), "log.jsonl"), "utf-8")
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l));
@@ -113,7 +114,7 @@ describe("logMessage", () => {
     store.logMessage(THREAD_ID, makeMessage("m1", "First"));
     store.logMessage(THREAD_ID, makeMessage("m2", "Second"));
 
-    const lines = readFileSync(join(store.threadDir(THREAD_ID), "log.jsonl"), "utf-8")
+    const lines = readFileSync(join(store.channelDir(THREAD_ID), "log.jsonl"), "utf-8")
       .trim()
       .split("\n");
 
@@ -207,13 +208,8 @@ describe("context save/load", () => {
 });
 
 describe("downloadAttachment", () => {
-  test("downloads file and returns relative path", async () => {
+  test("downloads file and returns path relative to channelDir", async () => {
     const store = new Store({ dataDir });
-
-    // Create a simple test server URL isn't feasible in unit tests,
-    // so we test with a data URL workaround using fetch mock
-    const dir = store.threadDir(THREAD_ID);
-    mkdirSync(join(dir, "attachments"), { recursive: true });
 
     // Just verify the sanitization and path building
     const result = await store.downloadAttachment(
@@ -222,6 +218,39 @@ describe("downloadAttachment", () => {
       "test file (1).txt"
     );
 
-    expect(result).toMatch(/^attachments\/\d+_test_file__1_.txt$/);
+    // Path should be: {encodedThreadId}/attachments/{safeName}
+    expect(result).toMatch(/^1234567890\.123456\/attachments\/\d+_test_file__1_.txt$/);
+  });
+});
+
+describe("logChannelMessage", () => {
+  test("appends entry to channel-level log without attachments", () => {
+    const store = new Store({ dataDir });
+    const msg = makeMessage("msg-passive", "Background chatter");
+    store.logChannelMessage(THREAD_ID, msg);
+
+    const logPath = join(store.channelDir(THREAD_ID), "log.jsonl");
+    const content = readFileSync(logPath, "utf-8");
+    const entry = JSON.parse(content.trim());
+    expect(entry.messageId).toBe("msg-passive");
+    expect(entry.threadId).toBe(THREAD_ID);
+    expect(entry.text).toBe("Background chatter");
+    expect(entry.isBot).toBe(false);
+    expect(entry.attachments).toBeUndefined();
+  });
+});
+
+describe("logBotResponse", () => {
+  test("appends isBot:true entry to channel log", () => {
+    const store = new Store({ dataDir });
+    store.logBotResponse(THREAD_ID, "Here is my answer");
+
+    const logPath = join(store.channelDir(THREAD_ID), "log.jsonl");
+    const content = readFileSync(logPath, "utf-8");
+    const entry = JSON.parse(content.trim());
+    expect(entry.isBot).toBe(true);
+    expect(entry.text).toBe("Here is my answer");
+    expect(entry.threadId).toBe(THREAD_ID);
+    expect(entry.userId).toBe("bot");
   });
 });

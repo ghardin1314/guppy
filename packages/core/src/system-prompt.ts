@@ -77,9 +77,9 @@ ${dataDir}/
     ├── skills/                           # Transport-specific skills
     └── ${encode(channelId)}/                      # Channel level
         ├── MEMORY.md                     # Channel memory (all threads in this channel)
+        ├── log.jsonl                     # All channel messages (all threads)
         ├── skills/                       # Channel-specific skills
         └── ${encode(threadId)}/                   # Thread level
-            ├── log.jsonl                 # Message history (no tool results)
             ├── context.jsonl             # LLM context (managed by runtime)
             ├── attachments/              # User-shared files
             └── scratch/                  # Your working directory
@@ -200,19 +200,22 @@ Update this file whenever you modify the environment. On fresh container, read i
 ## History Search
 Two ways to search message history:
 
-### log.jsonl (local file — this thread only)
-Format: \`{"date":"...","messageId":"...","userId":"...","userName":"...","text":"...","isBot":false}\`
-Contains user messages and your final responses (not tool calls/results).
+### log.jsonl (local file — all channel messages)
+Format: \`{"date":"...","messageId":"...","threadId":"...","userId":"...","userName":"...","text":"...","isBot":false}\`
+Contains user messages and your final responses across all threads (not tool calls/results).
 
 \`\`\`bash
-# Recent messages
-tail -30 ${threadDir}/log.jsonl | jq -c '{date: .date[0:19], user: (.userName // .userId), text}'
+# Recent messages in this channel
+tail -50 ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
 
-# Search for topic
-grep -i "topic" ${threadDir}/log.jsonl | jq -c '{date: .date[0:19], user: (.userName // .userId), text}'
+# Search this thread only
+grep '"threadId":"${adapterName}:${channelId}:${threadId}"' ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
+
+# Search across all threads for a topic
+grep -i "topic" ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
 
 # Messages from specific user
-grep '"userName":"mario"' ${threadDir}/log.jsonl | tail -20 | jq -c '{date: .date[0:19], text}'
+grep '"userName":"mario"' ${channelDir}/log.jsonl | tail -20 | jq -c '{date: .date[0:19], text}'
 \`\`\`
 
 ### search_channel tool (broader channel history)

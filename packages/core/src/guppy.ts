@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { Store } from "./store";
 import { Orchestrator, type ChatHandle } from "./orchestrator";
 import { EventBus } from "./events";
+import type { Message } from "chat";
 import type { ActorMessage, AgentFactory, Settings } from "./types";
 
 export interface GuppyOptions {
@@ -48,6 +49,16 @@ export class Guppy {
 
   send(threadId: string, message: ActorMessage): void {
     this.orchestrator.send(threadId, message);
+  }
+
+  /** Full log + attachment download — use for active threads. */
+  async logMessage(threadId: string, message: Message): Promise<void> {
+    await this.store.logMessage(threadId, message);
+  }
+
+  /** Lightweight log, no attachment download — use for passive/background messages. */
+  logPassiveMessage(threadId: string, message: Message): void {
+    this.store.logChannelMessage(threadId, message);
   }
 
   sendToChannel(adapterId: string, channelId: string, text: string): void {

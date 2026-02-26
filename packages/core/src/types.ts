@@ -7,6 +7,7 @@ export type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 export interface LogEntry {
   date: string;
   messageId: string;
+  threadId?: string;
   userId: string;
   userName: string;
   text: string;
