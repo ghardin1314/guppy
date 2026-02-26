@@ -33,7 +33,6 @@
       },
       "dependencies": {
         "@guppy/core": "workspace:*",
-        "@guppy/web": "workspace:*",
       },
       "devDependencies": {
         "typescript": "^5.7.2",
@@ -48,16 +47,6 @@
         "@sinclair/typebox": "^0.34.48",
         "chat": "^4.14.0",
         "croner": "^10.0.1",
-      },
-      "devDependencies": {
-        "typescript": "^5.7.2",
-      },
-    },
-    "packages/web": {
-      "name": "@guppy/web",
-      "version": "0.0.1",
-      "dependencies": {
-        "@guppy/core": "workspace:*",
       },
       "devDependencies": {
         "typescript": "^5.7.2",
@@ -162,8 +151,6 @@
     "@guppy/core": ["@guppy/core@workspace:packages/core"],
 
     "@guppy/demo": ["@guppy/demo@workspace:apps/demo"],
-
-    "@guppy/web": ["@guppy/web@workspace:packages/web"],
 
     "@isaacs/cliui": ["@isaacs/cliui@8.0.2", "", { "dependencies": { "string-width": "^5.1.2", "string-width-cjs": "npm:string-width@^4.2.0", "strip-ansi": "^7.0.1", "strip-ansi-cjs": "npm:strip-ansi@^6.0.1", "wrap-ansi": "^8.1.0", "wrap-ansi-cjs": "npm:wrap-ansi@^7.0.0" } }, "sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA=="],
 

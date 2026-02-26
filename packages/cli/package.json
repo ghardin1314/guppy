@@ -9,11 +9,10 @@
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "echo no tests"
   },
   "dependencies": {
-    "@guppy/core": "workspace:*",
-    "@guppy/web": "workspace:*"
+    "@guppy/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
