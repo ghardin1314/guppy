@@ -1,6 +1,7 @@
 export { encode, decode, parseThreadId } from "./encode";
 export type { ThreadIdParts } from "./encode";
 export { Store } from "./store";
+export { Actor, describeError, isTransportRetryable } from "./actor";
 export { Orchestrator } from "./orchestrator";
 export type { OrchestratorOptions } from "./orchestrator";
 export type {

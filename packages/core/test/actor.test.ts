@@ -7,8 +7,9 @@ import type {
   AgentEvent,
   AgentMessage,
 } from "@mariozechner/pi-agent-core";
+import { RateLimitError } from "chat";
 import type { SentMessage, Thread } from "chat";
-import { Actor } from "../src/actor";
+import { Actor, describeError, isTransportRetryable } from "../src/actor";
 import { Store } from "../src/store";
 
 // --- Helpers ---
@@ -264,9 +265,11 @@ describe("Actor", () => {
     actor.receive({ type: "prompt", text: "succeed", thread });
     await settle();
 
-    // Error should appear either in a post or an edit
+    // Descriptive error should appear in a post or edit
     const allText = [...thread._posts, ...thread._edits];
-    const hasError = allText.some((t) => t.includes("Error: LLM failed"));
+    const hasError = allText.some((t) =>
+      t.includes("Something went wrong: LLM failed")
+    );
     expect(hasError).toBe(true);
     expect(mockAgent.prompt).toHaveBeenCalledTimes(2);
   });
@@ -411,5 +414,225 @@ describe("Actor", () => {
 
     actor.destroy();
     expect(mockAgent.abort).toHaveBeenCalled();
+  });
+
+  describe("descriptive error messages", () => {
+    test("rate limit error → friendly message", async () => {
+      mockAgent.prompt = mock(() => {
+        throw new Error("429 too many requests");
+      });
+
+      const actor = createActor();
+      const thread = createMockThread();
+
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle();
+
+      const allText = [...thread._posts, ...thread._edits];
+      expect(allText.some((t) => t.includes("rate-limited"))).toBe(true);
+    });
+
+    test("overloaded error → friendly message", async () => {
+      mockAgent.prompt = mock(() => {
+        throw new Error("overloaded_error");
+      });
+
+      const actor = createActor();
+      const thread = createMockThread();
+
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle();
+
+      const allText = [...thread._posts, ...thread._edits];
+      expect(allText.some((t) => t.includes("overloaded"))).toBe(true);
+    });
+
+    test("timeout error → connection message", async () => {
+      mockAgent.prompt = mock(() => {
+        throw new Error("ETIMEDOUT");
+      });
+
+      const actor = createActor();
+      const thread = createMockThread();
+
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle();
+
+      const allText = [...thread._posts, ...thread._edits];
+      expect(allText.some((t) => t.includes("lost connection"))).toBe(true);
+    });
+
+    test("context overflow → thread too long message", async () => {
+      mockAgent.prompt = mock(() => {
+        throw new Error("prompt is too long: 200000 tokens > 128000 maximum");
+      });
+
+      const actor = createActor();
+      const thread = createMockThread();
+
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle();
+
+      const allText = [...thread._posts, ...thread._edits];
+      expect(allText.some((t) => t.includes("too long"))).toBe(true);
+    });
+
+    test("unknown error → includes raw message", async () => {
+      mockAgent.prompt = mock(() => {
+        throw new Error("something bizarre happened");
+      });
+
+      const actor = createActor();
+      const thread = createMockThread();
+
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle();
+
+      const allText = [...thread._posts, ...thread._edits];
+      expect(
+        allText.some((t) => t.includes("something bizarre happened"))
+      ).toBe(true);
+      expect(allText.some((t) => t.includes("Something went wrong"))).toBe(
+        true
+      );
+    });
+  });
+
+  describe("transport retry", () => {
+    test("retries thread.post on RateLimitError then succeeds", async () => {
+      let postCount = 0;
+      const thread = createMockThread();
+      const originalPost = thread.post;
+      thread.post = mock(async (message: string) => {
+        postCount++;
+        if (postCount === 1) {
+          throw new RateLimitError("rate limited", 10);
+        }
+        return (originalPost as (m: string) => Promise<SentMessage>)(message);
+      }) as typeof thread.post;
+
+      const actor = createActor();
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle(200);
+
+      // Should have retried and succeeded
+      expect(postCount).toBeGreaterThan(1);
+      expect(thread._posts.length).toBeGreaterThan(0);
+    });
+
+    test("retries sentMessage.edit on RateLimitError then succeeds", async () => {
+      let editAttempt = 0;
+      const thread = createMockThread();
+
+      // Override to inject a failing edit on first attempt
+      thread.post = mock(async (message: string) => {
+        thread._posts.push(message);
+        const makeMock = (t: string): SentMessage =>
+          ({
+            id: `msg-${Date.now()}`,
+            text: t,
+            edit: mock(async (newContent: string) => {
+              editAttempt++;
+              if (editAttempt === 1) {
+                throw new RateLimitError("rate limited", 10);
+              }
+              thread._edits.push(newContent);
+              return makeMock(newContent);
+            }),
+          }) as unknown as SentMessage;
+        return makeMock(message);
+      }) as typeof thread.post;
+
+      const actor = createActor();
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle(200);
+
+      // edit was retried
+      expect(editAttempt).toBeGreaterThan(1);
+    });
+
+    test("non-retryable errors propagate immediately", async () => {
+      const thread = createMockThread();
+      thread.post = mock(async () => {
+        throw new Error("permission denied");
+      }) as typeof thread.post;
+
+      const actor = createActor();
+      actor.receive({ type: "prompt", text: "hi", thread });
+      await settle(100);
+
+      // Should not have retried — post was called once per enqueue attempt
+      // The error is caught by RunMessage.enqueue's catch, logged, and dropped
+      // Actor continues to next prompt
+      expect(mockAgent.prompt).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe("describeError", () => {
+  test("maps rate limit errors", () => {
+    expect(describeError(new Error("429 too many requests"))).toContain(
+      "rate-limited"
+    );
+  });
+
+  test("maps overloaded errors", () => {
+    expect(describeError(new Error("overloaded_error"))).toContain(
+      "overloaded"
+    );
+  });
+
+  test("maps timeout errors", () => {
+    expect(describeError(new Error("request timed out"))).toContain(
+      "lost connection"
+    );
+  });
+
+  test("maps context overflow", () => {
+    expect(
+      describeError(new Error("prompt is too long: 200k tokens > 128k"))
+    ).toContain("too long");
+  });
+
+  test("maps abort errors", () => {
+    expect(describeError(new Error("Request was aborted"))).toContain(
+      "interrupted"
+    );
+  });
+
+  test("passes through unknown errors with raw message", () => {
+    const result = describeError(new Error("weird stuff"));
+    expect(result).toContain("Something went wrong");
+    expect(result).toContain("weird stuff");
+  });
+
+  test("handles non-Error values", () => {
+    expect(describeError("string error")).toContain("Something went wrong");
+    expect(describeError(null)).toContain("Something went wrong");
+  });
+});
+
+describe("isTransportRetryable", () => {
+  test("RateLimitError is retryable", () => {
+    expect(isTransportRetryable(new RateLimitError("limited"))).toBe(true);
+  });
+
+  test("network errors are retryable", () => {
+    expect(isTransportRetryable(new Error("ECONNRESET"))).toBe(true);
+    expect(isTransportRetryable(new Error("ETIMEDOUT"))).toBe(true);
+    expect(isTransportRetryable(new Error("network error"))).toBe(true);
+  });
+
+  test("5xx errors are retryable", () => {
+    expect(isTransportRetryable(new Error("502 bad gateway"))).toBe(true);
+    expect(isTransportRetryable(new Error("503 service unavailable"))).toBe(
+      true
+    );
+  });
+
+  test("non-retryable errors return false", () => {
+    expect(isTransportRetryable(new Error("permission denied"))).toBe(false);
+    expect(isTransportRetryable(new Error("not found"))).toBe(false);
+    expect(isTransportRetryable("string")).toBe(false);
   });
 });

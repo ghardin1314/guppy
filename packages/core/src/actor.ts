@@ -1,7 +1,88 @@
 import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
+import { RateLimitError } from "chat";
 import type { SentMessage, Thread } from "chat";
 import type { Store } from "./store";
 import type { ActorMessage, AgentFactory, Settings } from "./types";
+
+// -- Transport retry --
+
+const TRANSPORT_MAX_RETRIES = 3;
+const TRANSPORT_BASE_DELAY_MS = 1000;
+
+function isTransportRetryable(err: unknown): boolean {
+  if (err instanceof RateLimitError) return true;
+  // Network errors, 5xx from adapters
+  if (err instanceof Error) {
+    return /network|ECONNRESET|ETIMEDOUT|5\d{2}|service.?unavailable/i.test(
+      err.message
+    );
+  }
+  return false;
+}
+
+function getTransportDelay(err: unknown, attempt: number): number {
+  if (err instanceof RateLimitError && err.retryAfterMs) {
+    return err.retryAfterMs;
+  }
+  return TRANSPORT_BASE_DELAY_MS * 2 ** attempt;
+}
+
+async function withTransportRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= TRANSPORT_MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < TRANSPORT_MAX_RETRIES && isTransportRetryable(err)) {
+        const delay = getTransportDelay(err, attempt);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+// -- Descriptive error messages --
+
+const ERROR_PATTERNS: Array<{ test: RegExp; message: string }> = [
+  {
+    test: /rate.?limit|429|too many requests|quota/i,
+    message:
+      "I'm being rate-limited by my AI provider. Try again in a moment.",
+  },
+  {
+    test: /overloaded|503|service.?unavailable|capacity/i,
+    message:
+      "My AI provider is currently overloaded. Try again in a moment.",
+  },
+  {
+    test: /timeout|timed?\s*out|ETIMEDOUT|ECONNRESET|network|connection/i,
+    message:
+      "I lost connection to my AI provider. Try again in a moment.",
+  },
+  {
+    test: /context.?length|too long|token.?limit|prompt is too long|exceeds.*context/i,
+    message:
+      "Our conversation is too long for me to process. Try starting a new thread.",
+  },
+  {
+    test: /abort|cancelled|canceled/i,
+    message: "My response was interrupted. Send your message again if needed.",
+  },
+];
+
+export { isTransportRetryable, describeError, withTransportRetry };
+
+function describeError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  for (const { test, message } of ERROR_PATTERNS) {
+    if (test.test(raw)) return message;
+  }
+  return `Something went wrong: ${raw}. Try sending your message again.`;
+}
 
 // -- RunMessage: owns the single evolving chat message for one agent run --
 
@@ -23,9 +104,7 @@ class RunMessage {
   thinking(): void {
     this.enqueue(async () => {
       this.statusLines.push("_Thinking_");
-      this.sentMessage = await this.thread.post(
-        this.statusDisplay()
-      );
+      await this.editOrPost(this.statusDisplay());
     });
   }
 
@@ -69,9 +148,13 @@ class RunMessage {
 
   private async editOrPost(display: string): Promise<void> {
     if (this.sentMessage) {
-      this.sentMessage = await this.sentMessage.edit(display);
+      this.sentMessage = await withTransportRetry(() =>
+        this.sentMessage!.edit(display)
+      );
     } else {
-      this.sentMessage = await this.thread.post(display);
+      this.sentMessage = await withTransportRetry(() =>
+        this.thread.post(display)
+      );
     }
   }
 
@@ -164,9 +247,8 @@ export class Actor {
         this.deps.store.saveContext(this.threadId, this.agent!.state.messages);
         msg.finish(this.extractFinalText());
       } catch (err) {
-        const errMsg =
-          err instanceof Error ? err.message : "Unknown error occurred";
-        msg.error(errMsg);
+        console.error(`[Actor:${this.threadId}]`, err);
+        msg.error(describeError(err));
       }
 
       await msg.flush();
