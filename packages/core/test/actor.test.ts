@@ -131,7 +131,7 @@ const THREAD_ID = "slack:C123:1234.5678";
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "guppy-actor-"));
-  store = new Store({ dataDir });
+  store = new Store({ dataDir, getAdapter: (name) => ({ name }) });
   mockAgent = createMockAgent();
   agentFactory = mock(() => mockAgent as unknown as Agent);
 });

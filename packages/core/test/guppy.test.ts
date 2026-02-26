@@ -58,6 +58,8 @@ function createMockChat(): ChatHandle {
         },
       };
     },
+    getAdapter: (name: string) => ({ name }) as never,
+    getState: () => ({}) as never,
   };
 }
 
@@ -126,6 +128,8 @@ describe("Guppy", () => {
           },
         };
       },
+      getAdapter: (name: string) => ({ name }) as never,
+      getState: () => ({}) as never,
     };
 
     const guppy = new Guppy({
@@ -135,7 +139,7 @@ describe("Guppy", () => {
       chat: mockChat,
     });
 
-    guppy.sendToChannel("slack", "C1", "hello");
+    guppy.sendToChannel("slack:C1", "hello");
     await new Promise((r) => setTimeout(r, 50));
 
     expect(postCalled).toBe(true);

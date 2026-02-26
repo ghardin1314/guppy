@@ -435,11 +435,9 @@ Mom's event bus watches a filesystem directory and creates synthetic Slack event
 // New thread — dispatches via orchestrator.sendToChannel()
 {
   "type": "one-shot",
-  "adapterId": "slack",
-  "channelId": "C123ABC",
+  "channelId": "slack:C123ABC",
   "text": "Time for the weekly report",
-  "schedule": "2025-03-01T09:00:00",
-  "timezone": "America/New_York"
+  "at": "2025-03-01T09:00:00-05:00"
 }
 ```
 

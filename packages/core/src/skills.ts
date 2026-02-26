@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
-import { encode } from "./encode";
+import { channelDir } from "./encode";
 import type { ThreadMeta } from "./types";
 
 export interface Skill {
@@ -97,11 +97,11 @@ function scanSkillsDir(
 }
 
 export function loadSkills(dataDir: string, threadMeta: ThreadMeta): Skill[] {
-  const channelEncoded = encode(threadMeta.channelId);
+  const chanDir = channelDir(dataDir, threadMeta.adapterName, threadMeta.channelKey);
   const scopes: Array<{ dir: string; source: Skill["source"] }> = [
     { dir: join(dataDir, "skills"), source: "global" },
     { dir: join(dataDir, threadMeta.adapterName, "skills"), source: "transport" },
-    { dir: join(dataDir, threadMeta.adapterName, channelEncoded, "skills"), source: "channel" },
+    { dir: join(chanDir, "skills"), source: "channel" },
   ];
 
   const byName = new Map<string, Skill>();

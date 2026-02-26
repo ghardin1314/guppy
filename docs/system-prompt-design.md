@@ -146,9 +146,9 @@ You can schedule events that wake you up at specific times or when external thin
 {"type": "immediate", "threadId": "{threadId}", "text": "New GitHub issue opened"}
 ```
 
-**One-shot** - Triggers once at a specific time. Use for reminders.
+**One-shot** - Triggers once at a specific time. Use for reminders. The `at` field must be ISO 8601 with offset (e.g. `+01:00`, `-05:00`, or `Z`).
 ```json
-{"type": "one-shot", "threadId": "{threadId}", "text": "Remind about dentist", "schedule": "2025-12-15T09:00:00", "timezone": "America/New_York"}
+{"type": "one-shot", "threadId": "{threadId}", "text": "Remind about dentist", "at": "2025-12-15T09:00:00-05:00"}
 ```
 
 **Periodic** - Triggers on a cron schedule. Use for recurring tasks.
@@ -158,10 +158,10 @@ You can schedule events that wake you up at specific times or when external thin
 
 To create an event in a **new thread** (posts to channel, creates thread, runs agent):
 ```json
-{"type": "periodic", "adapterId": "{adapterName}", "channelId": "{channelId}", "text": "Weekly report", "schedule": "0 9 * * 1", "timezone": "{timezone}"}
+{"type": "periodic", "channelId": "{adapterName}:{channelId}", "text": "Weekly report", "schedule": "0 9 * * 1", "timezone": "{timezone}"}
 ```
 
-Events with `threadId` run in that thread. Events with `adapterId` + `channelId` (no `threadId`) create a new thread.
+Events with `threadId` run in that thread. Events with `channelId` (no `threadId`) create a new thread.
 
 ### Cron Format
 `minute hour day-of-month month day-of-week`
@@ -171,13 +171,13 @@ Events with `threadId` run in that thread. Events with `adapterId` + `channelId`
 - `0 0 1 * *` = first of each month at midnight
 
 ### Timezones
-One-shot `schedule` values use ISO 8601 format. Periodic events use IANA timezone names. When users mention times without timezone, assume {timezone}.
+One-shot `at` values must include the UTC offset (e.g. `-05:00` for EST, `-04:00` for EDT). Periodic events use IANA timezone names. The system timezone is {timezone}. When users mention times without timezone, use the offset for {timezone}.
 
 ### Creating Events
 Use unique filenames to avoid overwriting:
 ```bash
 cat > {dataDir}/events/reminder-$(date +%s).json << 'EOF'
-{"type": "one-shot", "threadId": "{threadId}", "text": "Dentist tomorrow", "schedule": "2025-12-14T09:00:00", "timezone": "America/New_York"}
+{"type": "one-shot", "threadId": "{threadId}", "text": "Dentist tomorrow", "at": "2025-12-14T09:00:00-05:00"}
 EOF
 ```
 
@@ -423,7 +423,7 @@ export const config = {
 | Channel/user listings | Full workspace listings in prompt | Thread context only (no listings) |
 | Memory hierarchy | Global + per-channel (2 levels) | Global + transport + channel (3 levels) |
 | Data directory | Flat `{workspace}/{channelId}/` | Nested `{data}/{adapter}/{channel}/{thread}/` |
-| Event targeting | `channelId` only | `threadId` or `adapterId` + `channelId` |
+| Event targeting | `channelId` only | `threadId` or `channelId` |
 | Thread scoping | Per-channel | Per-thread ID (`adapter:channel:thread`) |
 | Log query paths | Relative (`log.jsonl`) | Full path (`{threadDir}/log.jsonl`) |
 | search_channel | N/A | Tool for broader channel history |

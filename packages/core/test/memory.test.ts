@@ -3,14 +3,17 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { formatMemory } from "../src/memory";
+import type { ChannelKey, ThreadKey } from "../src/encode";
 import type { ThreadMeta } from "../src/types";
 
 let dataDir: string;
 
 const meta: ThreadMeta = {
   adapterName: "slack",
-  channelId: "C123ABC",
-  threadId: "1234.5678",
+  channelId: "slack:C123ABC",
+  threadId: "slack:C123ABC:1234.5678",
+  channelKey: "C123ABC" as ChannelKey,
+  threadKey: "1234.5678" as ThreadKey,
   isDM: false,
 };
 
@@ -73,8 +76,10 @@ describe("formatMemory", () => {
   test("handles encoded channel IDs", () => {
     const gchatMeta: ThreadMeta = {
       adapterName: "gchat",
-      channelId: "spaces/ABC123",
-      threadId: "t1",
+      channelId: "gchat:spaces/ABC123",
+      threadId: "gchat:spaces/ABC123:t1",
+      channelKey: "spaces/ABC123" as ChannelKey,
+      threadKey: "t1" as ThreadKey,
       isDM: false,
     };
     // encode("spaces/ABC123") => "spaces%2FABC123"

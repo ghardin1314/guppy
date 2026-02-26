@@ -4,12 +4,11 @@ import {
   test,
   beforeEach,
   afterEach,
-  mock,
 } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { EventBus, resolveScheduleMs } from "../src/events";
+import { EventBus } from "../src/events";
 import type { EventDispatch, EventTarget } from "../src/types";
 
 let eventsDir: string;
@@ -102,7 +101,7 @@ describe("EventBus", () => {
     writeEvent("future.json", {
       type: "one-shot",
       text: "scheduled",
-      schedule: futureDate,
+      at: futureDate,
       threadId: "slack:C1:T1",
     });
 
@@ -134,7 +133,7 @@ describe("EventBus", () => {
     writeEvent("past.json", {
       type: "one-shot",
       text: "overdue",
-      schedule: pastDate,
+      at: pastDate,
       threadId: "slack:C1:T1",
     });
 
@@ -163,8 +162,7 @@ describe("EventBus", () => {
       text: "tick",
       schedule: "* * * * * *",
       timezone: "UTC",
-      adapterId: "slack",
-      channelId: "C1",
+      channelId: "slack:C1",
     });
 
     const bus = new EventBus(eventsDir, dispatch);
@@ -174,7 +172,7 @@ describe("EventBus", () => {
     await settle(1500);
 
     expect(calls.length).toBeGreaterThanOrEqual(1);
-    expect(calls[0].target).toEqual({ adapterId: "slack", channelId: "C1" });
+    expect(calls[0].target).toEqual({ channelId: "slack:C1" });
     expect(calls[0].text).toContain("tick");
 
     // File should still exist (periodic events persist)
@@ -216,7 +214,7 @@ describe("EventBus", () => {
     writeEvent("cancel-me.json", {
       type: "one-shot",
       text: "should not fire",
-      schedule: futureDate,
+      at: futureDate,
       threadId: "slack:C1:T1",
     });
 
@@ -249,7 +247,7 @@ describe("EventBus", () => {
     writeEvent("modify.json", {
       type: "one-shot",
       text: "original",
-      schedule: farFuture,
+      at: farFuture,
       threadId: "slack:C1:T1",
     });
 
@@ -262,7 +260,7 @@ describe("EventBus", () => {
     writeEvent("modify.json", {
       type: "one-shot",
       text: "updated",
-      schedule: soonDate,
+      at: soonDate,
       threadId: "slack:C1:T1",
     });
 
@@ -321,8 +319,7 @@ describe("EventBus", () => {
     writeEvent("channel-target.json", {
       type: "immediate",
       text: "to channel",
-      adapterId: "slack",
-      channelId: "C1",
+      channelId: "slack:C1",
     });
 
     await settle();
@@ -330,7 +327,7 @@ describe("EventBus", () => {
     expect(calls.length).toBe(2);
 
     const threadCall = calls.find((c) => "threadId" in c.target);
-    const channelCall = calls.find((c) => "adapterId" in c.target);
+    const channelCall = calls.find((c) => "channelId" in c.target);
 
     expect(threadCall).toBeDefined();
     expect(channelCall).toBeDefined();
@@ -338,9 +335,8 @@ describe("EventBus", () => {
       "slack:C1:T1"
     );
     expect(
-      (channelCall!.target as { adapterId: string; channelId: string })
-        .adapterId
-    ).toBe("slack");
+      (channelCall!.target as { channelId: string }).channelId
+    ).toBe("slack:C1");
 
     bus.stop();
   });
@@ -355,7 +351,7 @@ describe("EventBus", () => {
     writeEvent("stopped.json", {
       type: "one-shot",
       text: "should not fire",
-      schedule: futureDate,
+      at: futureDate,
       threadId: "slack:C1:T1",
     });
 
@@ -391,31 +387,5 @@ describe("EventBus", () => {
     expect(existsSync(newDir)).toBe(true);
 
     bus.stop();
-  });
-});
-
-describe("resolveScheduleMs", () => {
-  test("without timezone parses as-is", () => {
-    const ms = resolveScheduleMs("2025-06-15T12:00:00Z");
-    expect(ms).toBe(new Date("2025-06-15T12:00:00Z").getTime());
-  });
-
-  test("with timezone converts correctly", () => {
-    // 9:00 AM in America/New_York should be different from 9:00 AM UTC
-    const ms = resolveScheduleMs(
-      "2025-06-15T09:00:00",
-      "America/New_York"
-    );
-    const utcMs = new Date("2025-06-15T09:00:00Z").getTime();
-
-    // NYC is UTC-4 in June (EDT), so 9am NYC = 1pm UTC = 4 hours later
-    expect(ms).toBeGreaterThan(utcMs);
-    // Should be roughly 4 hours difference
-    const diffHours = (ms - utcMs) / (1000 * 60 * 60);
-    expect(Math.round(diffHours)).toBe(4);
-  });
-
-  test("invalid date throws", () => {
-    expect(() => resolveScheduleMs("not-a-date", "UTC")).toThrow();
   });
 });

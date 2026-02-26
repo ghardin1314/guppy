@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { encode } from "./encode";
-import { formatSkillsForPrompt } from "./skills";
-import type { Skill } from "./skills";
+import { encode, channelDir as channelDirFrom, threadDir as threadDirFrom } from "./encode";
 import type { Sandbox } from "./sandbox";
+import type { Skill } from "./skills";
+import { formatSkillsForPrompt } from "./skills";
 import type { Settings, ThreadMeta } from "./types";
 
 const DEFAULT_IDENTITY = "You are a chat assistant. Be concise. No emojis.";
@@ -27,10 +27,12 @@ export interface BuildSystemPromptOptions {
 }
 
 export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
-  const { dataDir, identity, memory, skills, sandbox, settings, threadMeta } = options;
-  const { adapterName, channelId, threadId } = threadMeta;
-  const channelDir = `${dataDir}/${adapterName}/${encode(channelId)}`;
-  const threadDir = `${channelDir}/${encode(threadId)}`;
+  const { dataDir, identity, memory, skills, sandbox, settings, threadMeta } =
+    options;
+  const { adapterName, channelId, threadId, channelKey, threadKey } =
+    threadMeta;
+  const channelDir = channelDirFrom(dataDir, adapterName, channelKey);
+  const threadDir = threadDirFrom(dataDir, adapterName, channelKey, threadKey);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const envDescription =
@@ -43,12 +45,13 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 - Bash working directory: ${process.cwd()}
 - Be careful with system modifications`;
 
-  const formattedSkills = formatSkillsForPrompt(skills) || "(no skills installed yet)";
+  const formattedSkills =
+    formatSkillsForPrompt(skills) || "(no skills installed yet)";
 
   return `${identity}
 
 ## Context
-- For current date/time, use: date
+- You do NOT know the current time. Run \`date +"%Y-%m-%dT%H:%M:%S%z"\` to get the current time with UTC offset (for one-shot events).
 - You have access to previous conversation context including tool results from prior turns.
 - For older history beyond your context, search log.jsonl or use the search_channel tool.
 
@@ -72,14 +75,14 @@ ${dataDir}/
 ├── settings.json                         # Agent settings
 ├── events/                               # Event bus JSON files
 ├── skills/                               # Global skills
-└── ${adapterName}/                        # Transport level
+└── ${adapterName}/                         # Transport level
     ├── MEMORY.md                         # Transport memory (all channels on this transport)
     ├── skills/                           # Transport-specific skills
-    └── ${encode(channelId)}/                      # Channel level
+    └── ${encode(channelKey)}/              # Channel level
         ├── MEMORY.md                     # Channel memory (all threads in this channel)
         ├── log.jsonl                     # All channel messages (all threads)
         ├── skills/                       # Channel-specific skills
-        └── ${encode(threadId)}/                   # Thread level
+        └── ${encode(threadKey)}/           # Thread level
             ├── context.jsonl             # LLM context (managed by runtime)
             ├── attachments/              # User-shared files
             └── scratch/                  # Your working directory
@@ -122,9 +125,9 @@ You can schedule events that wake you up at specific times or when external thin
 {"type": "immediate", "threadId": "${threadDir}", "text": "New GitHub issue opened"}
 \`\`\`
 
-**One-shot** - Triggers once at a specific time. Use for reminders.
+**One-shot** - Triggers once at a specific time. Use for reminders. The \`at\` field must be ISO 8601 with offset (e.g. \`+01:00\`, \`-05:00\`, or \`Z\`).
 \`\`\`json
-{"type": "one-shot", "threadId": "${threadDir}", "text": "Remind about dentist", "schedule": "2025-12-15T09:00:00", "timezone": "America/New_York"}
+{"type": "one-shot", "threadId": "${threadDir}", "text": "Remind about dentist", "at": "2025-12-15T09:00:00-05:00"}
 \`\`\`
 
 **Periodic** - Triggers on a cron schedule. Use for recurring tasks.
@@ -134,10 +137,10 @@ You can schedule events that wake you up at specific times or when external thin
 
 To create an event in a **new thread** (posts to channel, creates thread, runs agent):
 \`\`\`json
-{"type": "periodic", "adapterId": "${adapterName}", "channelId": "${channelId}", "text": "Weekly report", "schedule": "0 9 * * 1", "timezone": "${timezone}"}
+{"type": "periodic", "channelId": "${channelId}", "text": "Weekly report", "schedule": "0 9 * * 1", "timezone": "${timezone}"}
 \`\`\`
 
-Events with \`threadId\` run in that thread. Events with \`adapterId\` + \`channelId\` (no \`threadId\`) create a new thread.
+Events with \`threadId\` run in that thread. Events with \`channelId\` (no \`threadId\`) create a new thread.
 
 ### Cron Format
 \`minute hour day-of-month month day-of-week\`
@@ -147,13 +150,13 @@ Events with \`threadId\` run in that thread. Events with \`adapterId\` + \`chann
 - \`0 0 1 * *\` = first of each month at midnight
 
 ### Timezones
-One-shot \`schedule\` values use ISO 8601 format. Periodic events use IANA timezone names. When users mention times without timezone, assume ${timezone}.
+One-shot \`at\` values must include the UTC offset (e.g. \`-05:00\` for EST, \`-04:00\` for EDT). Periodic events use IANA timezone names. The system timezone is ${timezone}. When users mention times without timezone, use the offset for ${timezone}.
 
 ### Creating Events
 Use unique filenames to avoid overwriting:
 \`\`\`bash
 cat > ${dataDir}/events/reminder-$(date +%s).json << 'EOF'
-{"type": "one-shot", "threadId": "${threadDir}", "text": "Dentist tomorrow", "schedule": "2025-12-14T09:00:00", "timezone": "America/New_York"}
+{"type": "one-shot", "threadId": "${threadDir}", "text": "Dentist tomorrow", "at": "2025-12-14T09:00:00-05:00"}
 EOF
 \`\`\`
 
@@ -209,7 +212,7 @@ Contains user messages and your final responses across all threads (not tool cal
 tail -50 ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
 
 # Search this thread only
-grep '"threadId":"${adapterName}:${channelId}:${threadId}"' ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
+grep '"threadId":"${threadId}"' ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
 
 # Search across all threads for a topic
 grep -i "topic" ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
@@ -226,6 +229,5 @@ Use the search_channel tool to search messages beyond this thread, across the wh
 - **read**: Read file contents. Supports line range (offset, limit).
 - **write**: Create or overwrite files. Creates parent directories.
 - **edit**: Surgical string replacement in files. Requires unique match.
-- **upload**: Share a file to the current thread.
-- **search_channel**: Search message history in the current channel.`;
+- **upload**: Share a file to the current thread.`;
 }

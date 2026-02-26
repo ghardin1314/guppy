@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { encode, decode, parseThreadId } from "../src/encode";
+import { encode, decode, adapterNameFrom, resolveThreadKeys, type ChannelKey, type ThreadKey } from "../src/encode";
 
 describe("encode", () => {
   test("passes safe strings through unchanged", () => {
@@ -50,27 +50,48 @@ describe("decode", () => {
   });
 });
 
-describe("parseThreadId", () => {
-  test("splits standard slack thread ID", () => {
-    const result = parseThreadId("slack:C123ABC:1234567890.123456");
+describe("adapterNameFrom", () => {
+  test("extracts adapter name", () => {
+    expect(adapterNameFrom("slack:C123ABC:1234567890.123456")).toBe("slack");
+  });
+
+  test("throws on missing colon", () => {
+    expect(() => adapterNameFrom("nocolons")).toThrow("no colon found");
+  });
+});
+
+describe("resolveThreadKeys", () => {
+  const slackAdapter = { name: "slack" };
+  const gchatAdapter = { name: "gchat" };
+
+  test("splits standard slack thread ID (default 2-segment channel)", () => {
+    const result = resolveThreadKeys(slackAdapter, "slack:C123ABC:1234567890.123456");
     expect(result).toEqual({
       adapter: "slack",
-      channelId: "C123ABC",
-      threadId: "1234567890.123456",
+      channelKey: "C123ABC" as ChannelKey,
+      threadKey: "1234567890.123456" as ThreadKey,
     });
   });
 
-  test("handles colons in third segment", () => {
-    const result = parseThreadId("gchat:spaces/ABC123:thread:with:colons");
+  test("handles colons in thread segment", () => {
+    const result = resolveThreadKeys(gchatAdapter, "gchat:spaces/ABC123:thread:with:colons");
     expect(result).toEqual({
       adapter: "gchat",
-      channelId: "spaces/ABC123",
-      threadId: "thread:with:colons",
+      channelKey: "spaces/ABC123" as ChannelKey,
+      threadKey: "thread:with:colons" as ThreadKey,
     });
   });
 
-  test("throws on missing colons", () => {
-    expect(() => parseThreadId("nocolons")).toThrow("found no colons");
-    expect(() => parseThreadId("one:colon")).toThrow("found only one colon");
+  test("uses adapter.channelIdFromThreadId when provided (Discord 4-segment)", () => {
+    const discordAdapter = {
+      name: "discord",
+      channelIdFromThreadId: (id: string) => id.split(":").slice(0, 3).join(":"),
+    };
+    const result = resolveThreadKeys(discordAdapter, "discord:guild1:chan1:thread1");
+    expect(result).toEqual({
+      adapter: "discord",
+      channelKey: "guild1:chan1" as ChannelKey,
+      threadKey: "thread1" as ThreadKey,
+    });
   });
 });

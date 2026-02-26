@@ -2,11 +2,10 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { Thread } from "chat";
 import type { Sandbox } from "../sandbox";
 import { createBashTool } from "./bash";
-import { createReadTool } from "./read";
-import { createWriteTool } from "./write";
 import { createEditTool } from "./edit";
+import { createReadTool } from "./read";
 import { createUploadTool } from "./upload";
-import { createHistoryTool } from "./history";
+import { createWriteTool } from "./write";
 
 export interface ToolDeps {
   sandbox: Sandbox;
@@ -22,13 +21,11 @@ export function buildTools(deps: ToolDeps): AgentTool<any>[] {
     createWriteTool(deps.workspacePath),
     createEditTool(deps.workspacePath),
     createUploadTool(deps.workspacePath, deps.thread),
-    createHistoryTool(deps.thread),
   ];
 }
 
 export { createBashTool } from "./bash";
-export { createReadTool } from "./read";
-export { createWriteTool } from "./write";
 export { createEditTool } from "./edit";
+export { createReadTool } from "./read";
 export { createUploadTool } from "./upload";
-export { createHistoryTool } from "./history";
+export { createWriteTool } from "./write";

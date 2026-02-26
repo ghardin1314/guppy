@@ -60,6 +60,8 @@ function createMockChat(): ChatHandle {
     channel() {
       return { async post() { return { threadId: "mock-thread" }; } };
     },
+    getAdapter: (name: string) => ({ name }) as never,
+    getState: () => ({}) as never,
   };
 }
 
@@ -71,7 +73,7 @@ let agentFactory: (thread: Thread) => Agent;
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "guppy-orch-"));
-  store = new Store({ dataDir });
+  store = new Store({ dataDir, getAdapter: (name) => ({ name }) });
   chat = createMockChat();
   factoryCallIds = [];
   agentFactory = (thread: Thread) => {
@@ -169,10 +171,12 @@ describe("Orchestrator", () => {
             },
           };
         },
+        getAdapter: (name: string) => ({ name }) as never,
+        getState: () => ({}) as never,
       };
 
       const orch = new Orchestrator({ store, agentFactory, chat: mockChat, settings: {} });
-      orch.sendToChannel("slack", "C1", "hello channel");
+      orch.sendToChannel("slack:C1", "hello channel");
 
       await new Promise((r) => setTimeout(r, 50));
 
@@ -198,6 +202,8 @@ describe("Orchestrator", () => {
               },
             };
           },
+          getAdapter: (name: string) => ({ name }) as never,
+          getState: () => ({}) as never,
         };
 
         const orch = new Orchestrator({
@@ -206,7 +212,7 @@ describe("Orchestrator", () => {
           chat: mockChat,
           settings: {},
         });
-        orch.sendToChannel("slack", "C1", "hello");
+        orch.sendToChannel("slack:C1", "hello");
 
         await new Promise((r) => setTimeout(r, 50));
 

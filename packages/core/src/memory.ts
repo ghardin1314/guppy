@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { encode } from "./encode";
+import { channelDir } from "./encode";
 import type { ThreadMeta } from "./types";
 
 function tryReadFile(path: string): string {
@@ -27,7 +27,7 @@ export function formatMemory(dataDir: string, threadMeta: ThreadMeta): string {
   }
 
   const channel = tryReadFile(
-    join(dataDir, threadMeta.adapterName, encode(threadMeta.channelId), "MEMORY.md"),
+    join(channelDir(dataDir, threadMeta.adapterName, threadMeta.channelKey), "MEMORY.md"),
   );
   if (channel) {
     parts.push(`### Channel Memory\n${channel}`);

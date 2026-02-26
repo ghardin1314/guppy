@@ -19,7 +19,7 @@ The orchestrator is the front door. Callers never interact with actors directly.
 ```typescript
 interface Orchestrator {
   send(threadId: string, message: ActorMessage): void;
-  sendToChannel(adapterId: string, channelId: string, text: string): void;
+  sendToChannel(channelId: string, text: string): void;
 }
 ```
 
@@ -37,7 +37,7 @@ function createOrchestrator(deps: {
 
 **`sendToChannel` flow:**
 1. `chat.channel(channelId).post(text)` → `SentMessage` with `.threadId`
-2. Construct lazy `Thread` via `new ThreadImpl({ id: sentMessage.threadId, adapterName: adapterId, channelId, isDM: false })`
+2. Construct `ThreadImpl` via `resolveThread(sentMessage.threadId)`
 3. `this.send(sentMessage.threadId, { type: "prompt", text, thread, message: sentMessage })`
 
 This lives in the orchestrator because there's no thread actor yet — the thread doesn't exist until the channel post creates it.
@@ -688,15 +688,13 @@ Watches `data/events/` for JSON event files. Three types:
 ```json
 {
   "type": "one-shot",
-  "channelId": "C123ABC",
-  "adapterId": "slack",
+  "channelId": "slack:C123ABC",
   "text": "Time for the weekly report",
-  "schedule": "2025-03-01T09:00:00",
-  "timezone": "America/New_York"
+  "at": "2025-03-01T09:00:00-05:00"
 }
 ```
 
-Events with `threadId` dispatch via `orchestrator.send()`. Events with `channelId` + `adapterId` (no `threadId`) dispatch via `orchestrator.sendToChannel()` — the orchestrator posts to the channel, gets the new thread ID, and routes to a new actor.
+Events with `threadId` dispatch via `orchestrator.send()`. Events with `channelId` (no `threadId`) dispatch via `orchestrator.sendToChannel()` — the orchestrator posts to the channel, gets the new thread ID, and routes to a new actor.
 
 ### Processing
 

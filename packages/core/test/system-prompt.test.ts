@@ -4,14 +4,17 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildSystemPrompt, loadIdentity } from "../src/system-prompt";
 import type { Sandbox } from "../src/sandbox";
+import type { ChannelKey, ThreadKey } from "../src/encode";
 import type { Settings, ThreadMeta } from "../src/types";
 
 let dataDir: string;
 
 const meta: ThreadMeta = {
   adapterName: "slack",
-  channelId: "C123",
-  threadId: "t1",
+  channelId: "slack:C123",
+  threadId: "slack:C123:t1",
+  channelKey: "C123" as ChannelKey,
+  threadKey: "t1" as ThreadKey,
   isDM: false,
 };
 

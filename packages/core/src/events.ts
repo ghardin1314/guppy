@@ -187,10 +187,14 @@ export class EventBus {
   private handleOneShot(filename: string, event: GuppyEvent): void {
     if (event.type !== "one-shot") return;
 
-    const targetMs = resolveScheduleMs(event.schedule, event.timezone);
-    const now = Date.now();
+    const targetMs = new Date(event.at).getTime();
+    if (isNaN(targetMs)) {
+      console.warn(`[EventBus] Invalid date in ${filename}: ${event.at}`);
+      this.deleteFile(filename);
+      return;
+    }
 
-    const delay = Math.max(0, targetMs - now);
+    const delay = Math.max(0, targetMs - Date.now());
     const timer = setTimeout(() => {
       this.timers.delete(filename);
       this.execute(filename, event);
@@ -231,7 +235,7 @@ export class EventBus {
         scheduleInfo = "immediate";
         break;
       case "one-shot":
-        scheduleInfo = event.schedule;
+        scheduleInfo = event.at;
         break;
       case "periodic":
         scheduleInfo = event.schedule;
@@ -240,7 +244,7 @@ export class EventBus {
 
     const target: EventTarget = "threadId" in event
       ? { threadId: event.threadId }
-      : { adapterId: event.adapterId, channelId: event.channelId };
+      : { channelId: event.channelId };
 
     const formatted = `[EVENT:${filename}:${event.type}:${scheduleInfo}] ${event.text}`;
     this.dispatch(target, formatted);
@@ -267,37 +271,6 @@ export class EventBus {
   }
 }
 
-/**
- * Resolve a naive datetime string + IANA timezone to epoch ms.
- *
- * JS has no built-in "parse this datetime in timezone X" — `new Date()` always
- * interprets relative to the host machine's timezone. To work around this:
- *
- * 1. Parse the input string (JS interprets it in local time)
- * 2. Re-format into the target timezone using `toLocaleString("sv-SE", …)`.
- *    sv-SE outputs an ISO-ish format ("2025-06-15 09:00:00") unlike most
- *    locales which produce ambiguous formats like "6/15/2025, 9:00:00 AM".
- * 3. Append "Z" and re-parse to get "what UTC ms would this wall-clock be?"
- * 4. The difference between steps 1 and 3 is the timezone offset — apply it.
- */
-export function resolveScheduleMs(
-  schedule: string,
-  timezone?: string
-): number {
-  if (!timezone) {
-    return new Date(schedule).getTime();
-  }
-
-  const date = new Date(schedule);
-  if (isNaN(date.getTime())) {
-    throw new Error(`Invalid schedule date: ${schedule}`);
-  }
-
-  const localStr = date.toLocaleString("sv-SE", { timeZone: timezone });
-  const utcMs = new Date(localStr + "Z").getTime();
-  const offset = utcMs - date.getTime();
-  return date.getTime() - offset;
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -18,7 +18,10 @@ export class Guppy {
   readonly eventBus: EventBus;
 
   constructor(options: GuppyOptions) {
-    this.store = new Store({ dataDir: options.dataDir });
+    this.store = new Store({
+      dataDir: options.dataDir,
+      getAdapter: (name) => options.chat.getAdapter(name),
+    });
 
     this.orchestrator = new Orchestrator({
       store: this.store,
@@ -29,19 +32,7 @@ export class Guppy {
 
     const eventsDir = join(options.dataDir, "events");
     this.eventBus = new EventBus(eventsDir, (target, formattedText) => {
-      if ("threadId" in target) {
-        this.orchestrator.send(target.threadId, {
-          type: "prompt",
-          text: formattedText,
-          thread: null!,
-        });
-      } else {
-        this.orchestrator.sendToChannel(
-          target.adapterId,
-          target.channelId,
-          formattedText
-        );
-      }
+      this.orchestrator.dispatchEvent(target, formattedText);
     });
 
     this.eventBus.start();
@@ -61,8 +52,8 @@ export class Guppy {
     this.store.logChannelMessage(threadId, message);
   }
 
-  sendToChannel(adapterId: string, channelId: string, text: string): void {
-    this.orchestrator.sendToChannel(adapterId, channelId, text);
+  sendToChannel(channelId: string, text: string): void {
+    this.orchestrator.sendToChannel(channelId, text);
   }
 
   shutdown(): void {

@@ -38,6 +38,8 @@ function makeMessage(
 
 let dataDir: string;
 
+const mockGetAdapter = (name: string) => ({ name });
+
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "guppy-store-"));
 });
@@ -50,26 +52,26 @@ const THREAD_ID = "slack:C123ABC:1234567890.123456";
 
 describe("path resolution", () => {
   test("threadDir builds correct path", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     expect(store.threadDir(THREAD_ID)).toBe(
       join(dataDir, "slack", "C123ABC", "1234567890.123456")
     );
   });
 
   test("channelDir builds correct path", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     expect(store.channelDir(THREAD_ID)).toBe(
       join(dataDir, "slack", "C123ABC")
     );
   });
 
   test("transportDir builds correct path", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     expect(store.transportDir(THREAD_ID)).toBe(join(dataDir, "slack"));
   });
 
   test("encodes Google Chat-style IDs with slashes", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     const gchatId = "gchat:spaces/ABC123:threads/xyz";
     expect(store.threadDir(gchatId)).toBe(
       join(dataDir, "gchat", "spaces%2FABC123", "threads%2Fxyz")
@@ -79,7 +81,7 @@ describe("path resolution", () => {
 
 describe("logMessage", () => {
   test("appends JSONL entry to channel-level log.jsonl", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     const msg = makeMessage("msg-1", "Hello world");
     store.logMessage(THREAD_ID, msg);
 
@@ -96,7 +98,7 @@ describe("logMessage", () => {
   });
 
   test("marks bot messages correctly", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     store.logMessage(THREAD_ID, makeMessage("b1", "Bot msg", { isBot: true }));
     store.logMessage(THREAD_ID, makeMessage("b2", "Me msg", { isMe: true }));
 
@@ -110,7 +112,7 @@ describe("logMessage", () => {
   });
 
   test("appends multiple messages", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     store.logMessage(THREAD_ID, makeMessage("m1", "First"));
     store.logMessage(THREAD_ID, makeMessage("m2", "Second"));
 
@@ -124,7 +126,7 @@ describe("logMessage", () => {
 
 describe("context save/load", () => {
   test("round-trips context messages", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     const messages: AgentMessage[] = [
       { role: "user", content: "Hello", timestamp: Date.now() },
       {
@@ -155,12 +157,12 @@ describe("context save/load", () => {
   });
 
   test("returns empty array for missing context", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     expect(store.loadContext(THREAD_ID)).toEqual([]);
   });
 
   test("saveContext uses atomic write (no .tmp file left behind)", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     const messages: AgentMessage[] = [
       { role: "user", content: "Hello", timestamp: Date.now() },
     ];
@@ -173,7 +175,7 @@ describe("context save/load", () => {
   });
 
   test("saveContext preserves original on simulated partial write", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     const original: AgentMessage[] = [
       { role: "user", content: "Original", timestamp: 1 },
     ];
@@ -190,7 +192,7 @@ describe("context save/load", () => {
   });
 
   test("saveContext overwrites existing file", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     const first: AgentMessage[] = [
       { role: "user", content: "First", timestamp: 1 },
     ];
@@ -209,7 +211,7 @@ describe("context save/load", () => {
 
 describe("downloadAttachment", () => {
   test("downloads file and returns path relative to channelDir", async () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
 
     // Just verify the sanitization and path building
     const result = await store.downloadAttachment(
@@ -225,7 +227,7 @@ describe("downloadAttachment", () => {
 
 describe("logChannelMessage", () => {
   test("appends entry to channel-level log without attachments", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     const msg = makeMessage("msg-passive", "Background chatter");
     store.logChannelMessage(THREAD_ID, msg);
 
@@ -242,7 +244,7 @@ describe("logChannelMessage", () => {
 
 describe("logBotResponse", () => {
   test("appends isBot:true entry to channel log", () => {
-    const store = new Store({ dataDir });
+    const store = new Store({ dataDir, getAdapter: mockGetAdapter });
     store.logBotResponse(THREAD_ID, "Here is my answer");
 
     const logPath = join(store.channelDir(THREAD_ID), "log.jsonl");

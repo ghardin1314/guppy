@@ -43,10 +43,14 @@ export type ActorMessage =
   | { type: "steer"; text: string }
   | { type: "abort" };
 
+import type { ChannelKey, ThreadKey } from "./encode";
+
 export interface ThreadMeta {
   adapterName: string;
-  channelId: string;
-  threadId: string;
+  channelId: string;   // composite, e.g. "slack:C123ABC"
+  threadId: string;    // composite, e.g. "slack:C123ABC:1234567890.123456"
+  channelKey: ChannelKey;
+  threadKey: ThreadKey;
   isDM: boolean;
 }
 
@@ -61,7 +65,6 @@ const ThreadTargetSchema = Type.Object({
 });
 
 const ChannelTargetSchema = Type.Object({
-  adapterId: Type.String(),
   channelId: Type.String(),
 });
 
@@ -75,8 +78,7 @@ const ImmediateEventSchema = Type.Object({
 const OneShotEventSchema = Type.Object({
   type: Type.Literal("one-shot"),
   text: Type.String(),
-  schedule: Type.String(),
-  timezone: Type.Optional(Type.String()),
+  at: Type.String(), // ISO 8601 with offset, e.g. "2025-12-15T09:00:00+01:00"
 });
 
 const PeriodicEventSchema = Type.Object({

@@ -12,7 +12,14 @@ import type { Message } from "chat";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import type { LogEntry, StoreOptions } from "./types";
-import { encode, parseThreadId } from "./encode";
+import {
+  encode,
+  adapterNameFrom,
+  resolveThreadKeys,
+  channelDir as channelDirFrom,
+  threadDir as threadDirFrom,
+  transportDir as transportDirFrom,
+} from "./encode";
 
 export interface LoadedAttachments {
   images: ImageContent[];
@@ -32,24 +39,33 @@ function detectImageMime(buf: Buffer): string | undefined {
 
 export class Store {
   readonly dataDir: string;
+  private getAdapter: (name: string) => { name: string; channelIdFromThreadId?(threadId: string): string };
 
-  constructor(options: StoreOptions) {
+  constructor(options: StoreOptions & {
+    getAdapter: (name: string) => { name: string; channelIdFromThreadId?(threadId: string): string };
+  }) {
     this.dataDir = options.dataDir;
+    this.getAdapter = options.getAdapter;
+  }
+
+  private resolve(compositeId: string) {
+    const adapter = this.getAdapter(adapterNameFrom(compositeId));
+    return resolveThreadKeys(adapter, compositeId);
   }
 
   threadDir(compositeId: string): string {
-    const { adapter, channelId, threadId } = parseThreadId(compositeId);
-    return join(this.dataDir, adapter, encode(channelId), encode(threadId));
+    const { adapter, channelKey, threadKey } = this.resolve(compositeId);
+    return threadDirFrom(this.dataDir, adapter, channelKey, threadKey);
   }
 
   channelDir(compositeId: string): string {
-    const { adapter, channelId } = parseThreadId(compositeId);
-    return join(this.dataDir, adapter, encode(channelId));
+    const { adapter, channelKey } = this.resolve(compositeId);
+    return channelDirFrom(this.dataDir, adapter, channelKey);
   }
 
   transportDir(compositeId: string): string {
-    const { adapter } = parseThreadId(compositeId);
-    return join(this.dataDir, adapter);
+    const { adapter } = this.resolve(compositeId);
+    return transportDirFrom(this.dataDir, adapter);
   }
 
   async logMessage(compositeId: string, message: Message): Promise<void> {
@@ -58,8 +74,8 @@ export class Store {
     this.ensureDir(chanDir);
     this.ensureDir(threadDir);
 
-    const { threadId: rawThreadId } = parseThreadId(compositeId);
-    const encodedThreadId = encode(rawThreadId);
+    const { threadKey } = this.resolve(compositeId);
+    const encodedThreadKey = encode(threadKey);
 
     const entry: LogEntry = {
       date: message.metadata.dateSent.toISOString(),
@@ -78,7 +94,7 @@ export class Store {
         const filename = att.name ?? "attachment";
         const localName = `${Date.now()}_${this.sanitizeFilename(filename)}`;
         // Attachments stored in threadDir, path relative to channelDir
-        const localPath = join(encodedThreadId, "attachments", localName);
+        const localPath = join(encodedThreadKey, "attachments", localName);
         attachmentEntries.push({ original: att.url, local: localPath, mimeType: att.mimeType });
 
         const absPath = join(chanDir, localPath);
@@ -198,16 +214,16 @@ export class Store {
     url: string,
     filename: string
   ): Promise<string> {
-    const { threadId: rawThreadId } = parseThreadId(compositeId);
-    const encodedThreadId = encode(rawThreadId);
+    const { threadKey } = this.resolve(compositeId);
+    const encodedThreadKey = encode(threadKey);
     const chanDir = this.channelDir(compositeId);
-    const attDir = join(chanDir, encodedThreadId, "attachments");
+    const attDir = join(chanDir, encodedThreadKey, "attachments");
     this.ensureDir(attDir);
 
     const safeName = `${Date.now()}_${this.sanitizeFilename(filename)}`;
     const absPath = join(attDir, safeName);
     await this.downloadToFile(url, absPath);
-    return join(encodedThreadId, "attachments", safeName);
+    return join(encodedThreadKey, "attachments", safeName);
   }
 
   /** Passive logging — logs to channel log without downloading attachments. */

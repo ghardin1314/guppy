@@ -8,7 +8,7 @@ import {
   formatMemory,
   loadIdentity,
   loadSkills,
-  parseThreadId,
+  resolveThreadKeys,
 } from "@guppy/core";
 import { Agent } from "@mariozechner/pi-agent-core";
 import type { Api, Model } from "@mariozechner/pi-ai";
@@ -24,11 +24,13 @@ export function createAgentFactory(deps: AgentFactoryDeps): AgentFactory {
   const { dataDir, sandbox, settings, model } = deps;
 
   return (thread) => {
-    const { adapter, channelId, threadId } = parseThreadId(thread.id);
+    const { adapter, channelKey, threadKey } = resolveThreadKeys(thread.adapter, thread.id);
     const meta: ThreadMeta = {
       adapterName: adapter,
-      channelId,
-      threadId,
+      channelId: thread.channelId,
+      threadId: thread.id,
+      channelKey,
+      threadKey,
       isDM: thread.isDM,
     };
     const identity = loadIdentity(dataDir);
