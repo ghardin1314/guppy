@@ -3,18 +3,28 @@ export type { ThreadIdParts } from "./encode";
 export { Store } from "./store";
 export { Actor, describeError, isTransportRetryable } from "./actor";
 export { Orchestrator } from "./orchestrator";
-export type { OrchestratorOptions } from "./orchestrator";
+export type { OrchestratorOptions, ChatHandle } from "./orchestrator";
+export { EventBus, resolveScheduleMs } from "./events";
+export { GuppyEventSchema } from "./types";
 export type {
   ActorMessage,
   Agent,
   AgentFactory,
   AgentMessage,
+  ChannelTarget,
+  EventDispatch,
+  EventTarget,
+  GuppyEvent,
+  ImmediateEvent,
   LogEntry,
   Message,
+  OneShotEvent,
+  PeriodicEvent,
   Settings,
   StoreOptions,
   Thread,
   ThreadMeta,
+  ThreadTarget,
 } from "./types";
 export { stripAnsi, sanitizeOutput } from "./sanitize";
 export { truncateHead, truncateTail, MAX_LINES, MAX_BYTES } from "./truncate";

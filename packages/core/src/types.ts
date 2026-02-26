@@ -49,3 +49,55 @@ export interface ThreadMeta {
 }
 
 export type AgentFactory = (threadId: string) => Agent;
+
+// -- Event bus types --
+
+import { type Static, Type } from "@sinclair/typebox";
+
+const ThreadTargetSchema = Type.Object({
+  threadId: Type.String(),
+});
+
+const ChannelTargetSchema = Type.Object({
+  adapterId: Type.String(),
+  channelId: Type.String(),
+});
+
+const EventTargetSchema = Type.Union([ThreadTargetSchema, ChannelTargetSchema]);
+
+const ImmediateEventSchema = Type.Object({
+  type: Type.Literal("immediate"),
+  text: Type.String(),
+});
+
+const OneShotEventSchema = Type.Object({
+  type: Type.Literal("one-shot"),
+  text: Type.String(),
+  schedule: Type.String(),
+  timezone: Type.Optional(Type.String()),
+});
+
+const PeriodicEventSchema = Type.Object({
+  type: Type.Literal("periodic"),
+  text: Type.String(),
+  schedule: Type.String(),
+  timezone: Type.String(),
+});
+
+export const GuppyEventSchema = Type.Intersect([
+  Type.Union([ImmediateEventSchema, OneShotEventSchema, PeriodicEventSchema]),
+  EventTargetSchema,
+]);
+
+export type ThreadTarget = Static<typeof ThreadTargetSchema>;
+export type ChannelTarget = Static<typeof ChannelTargetSchema>;
+export type EventTarget = Static<typeof EventTargetSchema>;
+export type ImmediateEvent = Static<typeof ImmediateEventSchema>;
+export type OneShotEvent = Static<typeof OneShotEventSchema>;
+export type PeriodicEvent = Static<typeof PeriodicEventSchema>;
+export type GuppyEvent = Static<typeof GuppyEventSchema>;
+
+export type EventDispatch = (
+  target: EventTarget,
+  formattedText: string
+) => void;

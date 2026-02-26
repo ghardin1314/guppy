@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Agent, AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SentMessage, Thread } from "chat";
-import { Orchestrator } from "../src/orchestrator";
+import { Orchestrator, type ChatHandle } from "../src/orchestrator";
 import { Store } from "../src/store";
 
 function createMockAgent() {
@@ -55,14 +55,24 @@ function createMockThread(id = "thread-1"): Thread {
   } as unknown as Thread;
 }
 
+function createMockChat(): ChatHandle {
+  return {
+    channel() {
+      return { async post() { return { threadId: "mock-thread" }; } };
+    },
+  };
+}
+
 let dataDir: string;
 let store: Store;
+let chat: ChatHandle;
 let factoryCallIds: string[];
 let agentFactory: (id: string) => Agent;
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "guppy-orch-"));
   store = new Store({ dataDir });
+  chat = createMockChat();
   factoryCallIds = [];
   agentFactory = (id: string) => {
     factoryCallIds.push(id);
@@ -76,7 +86,7 @@ afterEach(() => {
 
 describe("Orchestrator", () => {
   test("creates actor on demand per threadId", async () => {
-    const orch = new Orchestrator({ store, agentFactory });
+    const orch = new Orchestrator({ store, agentFactory, chat });
     const thread = createMockThread();
 
     orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
@@ -86,7 +96,7 @@ describe("Orchestrator", () => {
   });
 
   test("routes same threadId to same actor", async () => {
-    const orch = new Orchestrator({ store, agentFactory });
+    const orch = new Orchestrator({ store, agentFactory, chat });
     const thread = createMockThread();
 
     orch.send("slack:C1:T1", { type: "prompt", text: "first", thread });
@@ -99,7 +109,7 @@ describe("Orchestrator", () => {
   });
 
   test("different threadIds create different actors", async () => {
-    const orch = new Orchestrator({ store, agentFactory });
+    const orch = new Orchestrator({ store, agentFactory, chat });
     const thread = createMockThread();
 
     orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
@@ -117,7 +127,7 @@ describe("Orchestrator", () => {
       return a;
     };
 
-    const orch = new Orchestrator({ store, agentFactory: factory });
+    const orch = new Orchestrator({ store, agentFactory: factory, chat });
     const thread = createMockThread();
 
     orch.send("slack:C1:T1", { type: "prompt", text: "hi", thread });
@@ -138,8 +148,77 @@ describe("Orchestrator", () => {
     const orch = new Orchestrator({
       store,
       agentFactory,
+      chat,
       settings: customSettings,
     });
     orch.shutdown();
+  });
+
+  describe("sendToChannel", () => {
+    test("posts to channel via chat and routes to actor", async () => {
+      let postCalled = false;
+      let postedText = "";
+
+      const mockChat: ChatHandle = {
+        channel(channelId: string) {
+          return {
+            async post(text: string) {
+              postCalled = true;
+              postedText = text;
+              return { threadId: `slack:${channelId}:T-new` };
+            },
+          };
+        },
+      };
+
+      const orch = new Orchestrator({ store, agentFactory, chat: mockChat });
+      orch.sendToChannel("slack", "C1", "hello channel");
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(postCalled).toBe(true);
+      expect(postedText).toBe("hello channel");
+      // Should have routed to an actor
+      expect(factoryCallIds).toContain("slack:slack:C1:T-new");
+
+      orch.shutdown();
+    });
+
+    test("logs error when channel.post fails", async () => {
+      const errorCalls: unknown[][] = [];
+      const originalError = console.error;
+      console.error = (...args: unknown[]) => errorCalls.push(args);
+
+      try {
+        const mockChat: ChatHandle = {
+          channel() {
+            return {
+              async post() {
+                throw new Error("network failure");
+              },
+            };
+          },
+        };
+
+        const orch = new Orchestrator({
+          store,
+          agentFactory,
+          chat: mockChat,
+        });
+        orch.sendToChannel("slack", "C1", "hello");
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(
+          errorCalls.some((args) =>
+            String(args[0]).includes("sendToChannel failed")
+          )
+        ).toBe(true);
+
+        orch.shutdown();
+      } finally {
+        console.error = originalError;
+      }
+    });
   });
 });
