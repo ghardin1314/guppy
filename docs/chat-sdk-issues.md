@@ -1,6 +1,8 @@
-# Chat SDK — upstream issues to file
+# Chat SDK — upstream issues
 
 ## 1. Discord reaction events missing thread context
+
+**Upstream issue:** https://github.com/vercel/chat/issues/127
 
 **Adapter:** `@chat-adapter/discord`
 **Location:** `handleGatewayReaction` + `handleForwardedReaction`
@@ -23,3 +25,5 @@ if (isInThread && "parentId" in message.channel && message.channel.parentId) {
 Same logic should apply to reactions. The gateway `reaction.message.channel` object should expose `isThread()` and `parentId`.
 
 **Impact:** `event.threadId` from `onReaction` is a 3-segment channel-level ID instead of the correct 4-segment thread ID. Any feature keyed on `threadId` (abort-by-reaction, per-thread state) gets a wrong key for reactions in threads.
+
+**Local patch:** `patches/@chat-adapter%2Fdiscord@4.15.0.patch` — applies the `handleGatewayMessage` thread-resolution logic to `handleGatewayReaction`. Only fixes the gateway path; `handleForwardedReaction` (webhook path) remains unfixed since the raw event lacks channel type info. Remove patch when upstream fix lands.

@@ -1,0 +1,24 @@
+diff --git a/dist/index.js b/dist/index.js
+index 370b82ae194f097abd70e871b180d7cf284840ce..e904321c1a82534a46a328dc3f7e58bc506f1f43 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1561,10 +1561,17 @@ var DiscordAdapter = class {
+     }
+     const guildId = reaction.message.guildId || "@me";
+     const channelId = reaction.message.channelId;
++    const isInThread = reaction.message.channel?.isThread?.();
++    let discordThreadId;
++    let parentChannelId = channelId;
++    if (isInThread && "parentId" in reaction.message.channel && reaction.message.channel.parentId) {
++      discordThreadId = channelId;
++      parentChannelId = reaction.message.channel.parentId;
++    }
+     const threadId = this.encodeThreadId({
+       guildId,
+-      channelId,
+-      threadId: void 0
++      channelId: parentChannelId,
++      threadId: discordThreadId
+     });
+     const emojiName = reaction.emoji.name || "unknown";
+     const normalizedEmoji = this.normalizeDiscordEmoji(emojiName);
