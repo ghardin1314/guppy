@@ -346,7 +346,10 @@ export class Actor {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if ("role" in m && m.role === "assistant" && Array.isArray(m.content)) {
-        // Surface API errors that agent.prompt() doesn't throw
+        // Surface API errors / abort that agent.prompt() doesn't throw
+        if ("stopReason" in m && m.stopReason === "aborted") {
+          return "_Stopped_";
+        }
         if ("stopReason" in m && m.stopReason === "error" && "errorMessage" in m) {
           return describeError(new Error(m.errorMessage as string));
         }

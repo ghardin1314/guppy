@@ -18,10 +18,10 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.55.0",
-    "@mariozechner/pi-ai": "^0.55.0",
+    "@mariozechner/pi-agent-core": "^0.55.1",
+    "@mariozechner/pi-ai": "^0.55.1",
     "@sinclair/typebox": "^0.34.48",
-    "chat": "^4.14.0",
+    "chat": "^4.15.0",
     "croner": "^10.0.1"
   }
 }

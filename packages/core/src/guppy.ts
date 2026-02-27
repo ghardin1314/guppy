@@ -142,6 +142,13 @@ export class Guppy {
     this.orchestrator.send(threadId, message);
   }
 
+  /** Abort a single thread's agent (e.g. from an emoji reaction). */
+  abort(threadId: string): boolean {
+    const hit = this.orchestrator.sendCommand(threadId, { type: "abort" });
+    console.log(`[Guppy] abort ${threadId} → ${hit ? "sent" : "no active actor"}`);
+    return hit;
+  }
+
   /**
    * Handle a platform slash command event (from chat.onSlashCommand).
    * Broadcasts to all active actors in the event's channel.

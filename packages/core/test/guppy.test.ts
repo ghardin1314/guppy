@@ -175,6 +175,43 @@ describe("Guppy", () => {
     g.shutdown();
   });
 
+  describe("abort", () => {
+    test("active thread → calls agent.abort(), returns true", async () => {
+      const agents: Agent[] = [];
+      const factory: AgentFactory = (thread: Thread) => {
+        const a = createMockAgent();
+        a.prompt = mock(() => new Promise(() => {}));
+        agents.push(a);
+        return a;
+      };
+
+      const g = createTestGuppy({ agentFactory: factory });
+
+      g.orchestrator.send("slack:C1:T1", {
+        type: "prompt",
+        text: "hi",
+        thread: createMockThread("slack:C1:T1"),
+      });
+      await new Promise((r) => setTimeout(r, 20));
+
+      const result = g.orchestrator.sendCommand("slack:C1:T1", { type: "abort" });
+      expect(result).toBe(true);
+      expect(agents[0].abort).toHaveBeenCalled();
+
+      g.shutdown();
+    });
+
+    test("unknown thread → returns false, no actor created", () => {
+      const g = createTestGuppy();
+
+      const result = g.orchestrator.sendCommand("slack:C1:T-nope", { type: "abort" });
+      expect(result).toBe(false);
+      expect(factoryCallIds).toEqual([]);
+
+      g.shutdown();
+    });
+  });
+
   describe("handleSlashCommand", () => {
     test("/stop aborts all actors in channel", async () => {
       const agents: Agent[] = [];

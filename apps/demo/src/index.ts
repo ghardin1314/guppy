@@ -89,6 +89,13 @@ chat.onSlashCommand(async (event) => {
   guppy.handleSlashCommand(event);
 });
 
+// TODO: Discord adapter returns channel-level threadId for reactions, not the
+// actual thread ID. Abort won't match active actors until upstream fix lands.
+// See docs/chat-sdk-issues.md #1
+chat.onReaction(["x"], (event) => {
+  if (event.added) guppy.abort(event.threadId);
+});
+
 // -- Discord Gateway --
 // Connects the WebSocket for regular messages & reactions.
 // (HTTP interactions alone only handle slash commands & verification pings.)
