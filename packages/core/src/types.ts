@@ -35,15 +35,10 @@ export interface LogEntry {
 export interface Settings {
   compaction?: {
     enabled?: boolean;
+    contextWindow?: number;
     reserveTokens?: number;
     keepRecentTokens?: number;
   };
-  retry?: {
-    enabled?: boolean;
-    maxRetries?: number;
-    baseDelayMs?: number;
-  };
-  idleTimeoutMs?: number;
   maxQueueDepth?: number;
   inspectUrl?: (threadId: string) => string;
 }

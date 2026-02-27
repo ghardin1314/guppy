@@ -1,4 +1,5 @@
 import { Actor } from "./actor";
+import type { CompactionDeps } from "./actor";
 import { resolveThread } from "./resolve-thread";
 import type { Store } from "./store";
 import type { ActorMessage, AgentFactory, ChatHandle, EventTarget, Settings } from "./types";
@@ -8,6 +9,7 @@ export interface OrchestratorOptions {
   agentFactory: AgentFactory;
   settings: Settings;
   chat: ChatHandle;
+  compaction?: CompactionDeps;
 }
 
 export class Orchestrator {
@@ -16,12 +18,14 @@ export class Orchestrator {
   private agentFactory: AgentFactory;
   private settings: Settings;
   private chat: ChatHandle;
+  private compaction?: CompactionDeps;
 
   constructor(options: OrchestratorOptions) {
     this.store = options.store;
     this.agentFactory = options.agentFactory;
     this.settings = options.settings;
     this.chat = options.chat;
+    this.compaction = options.compaction;
   }
 
   send(threadId: string, message: ActorMessage): void {
@@ -106,6 +110,7 @@ export class Orchestrator {
         store: this.store,
         agentFactory: this.agentFactory,
         settings: this.settings,
+        compaction: this.compaction,
       });
       this.actors.set(threadId, actor);
     }

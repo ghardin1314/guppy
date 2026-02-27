@@ -1,7 +1,8 @@
 import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
-import type { ImageContent } from "@mariozechner/pi-ai";
+import type { Api, ImageContent, Model } from "@mariozechner/pi-ai";
 import { RateLimitError } from "chat";
 import type { Message, SentMessage, Thread } from "chat";
+import { resolveCompactionSettings, runCompaction } from "./compaction";
 import type { Store } from "./store";
 import type { ActorMessage, AgentFactory, Settings } from "./types";
 
@@ -183,10 +184,16 @@ class RunMessage {
 
 // -- Actor --
 
+export interface CompactionDeps {
+  model: Model<Api>;
+  getApiKey: (provider: string) => string | undefined;
+}
+
 interface ActorDeps {
   store: Store;
   agentFactory: AgentFactory;
   settings: Settings;
+  compaction?: CompactionDeps;
 }
 
 interface PromptItem {
@@ -275,6 +282,29 @@ export class Actor {
 
         await this.agent!.prompt(promptText, images);
         this.deps.store.saveContext(this.threadId, this.agent!.state.messages);
+
+        // Compact if needed (non-fatal — raw context already saved)
+        if (this.deps.compaction) {
+          try {
+            const compactionSettings = resolveCompactionSettings(
+              this.deps.settings,
+              this.deps.compaction.model,
+            );
+            const compacted = await runCompaction(
+              this.agent!.state.messages,
+              compactionSettings,
+              this.deps.compaction.model,
+              this.deps.compaction.getApiKey,
+            );
+            if (compacted !== this.agent!.state.messages) {
+              this.agent!.replaceMessages(compacted);
+              this.deps.store.saveContext(this.threadId, compacted);
+            }
+          } catch (err) {
+            console.warn(`[Actor:${this.threadId}] compaction failed:`, err);
+          }
+        }
+
         const finalText = this.extractFinalText();
 
         if (finalText.trim() === "[SILENT]") {

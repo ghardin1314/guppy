@@ -1,4 +1,15 @@
 export { Actor, describeError, isTransportRetryable } from "./actor";
+export type { CompactionDeps } from "./actor";
+export {
+  estimateContextTokens,
+  estimateTokens,
+  findCutPoint,
+  resolveCompactionSettings,
+  runCompaction,
+  serializeConversation,
+  shouldCompact,
+} from "./compaction";
+export type { CompactionSettings, CutPointResult } from "./compaction";
 export {
   BUILT_IN_COMMANDS,
   commandToMessage,

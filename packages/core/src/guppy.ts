@@ -122,6 +122,10 @@ export class Guppy {
       agentFactory: buildAgentFactory(dataDir, agent),
       settings,
       chat,
+      compaction: {
+        model: agent.model,
+        getApiKey: agent.getApiKey ?? defaultGetApiKey,
+      },
     });
 
     const eventsDir = join(dataDir, "events");
