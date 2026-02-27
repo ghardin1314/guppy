@@ -191,25 +191,15 @@ Maintain ${dataDir}/SYSTEM.md to log all environment modifications:
 
 Update this file whenever you modify the environment. On fresh container, read it first to restore your setup.
 
-## History Search
+## Channel History & Directory
+Data is persisted per-channel as messages flow through. Query with \`jq\`/\`grep\` when needed.
 
-### log.jsonl (local file — all channel messages)
-Format: \`{"date":"...","messageId":"...","threadId":"...","userId":"...","userName":"...","text":"...","isBot":false}\`
-Contains user messages and your final responses across all threads (not tool calls/results).
-
-\`\`\`bash
-# Recent messages in this channel
-tail -50 ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
-
-# Search this thread only
-grep '"threadId":"${threadId}"' ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
-
-# Search across all threads for a topic
-grep -i "topic" ${channelDir}/log.jsonl | jq -c '{date: .date[0:19], user: .userName, text}'
-
-# Messages from specific user
-grep '"userName":"mario"' ${channelDir}/log.jsonl | tail -20 | jq -c '{date: .date[0:19], text}'
-\`\`\`
+### Files
+- \`${channelDir}/log.jsonl\` — all messages in this channel (all threads) since you were installed. No tool calls/results.
+  Fields: \`date\`, \`messageId\`, \`threadId\`, \`userId\`, \`userName\` (display name), \`userHandle\` (@-mention handle), \`text\`, \`isBot\`
+- \`${channelDir}/meta.json\` — channel metadata: \`{"id":"slack:C123","name":"general","isDM":false}\`
+- \`${dataDir}/${adapterName}/*/meta.json\` — metadata for all known channels
+- \`${dataDir}/${adapterName}/*/log.jsonl\` — logs across all channels
 
 ## Tools
 - **bash**: Run shell commands. Install packages as needed. Primary tool for complex tasks.

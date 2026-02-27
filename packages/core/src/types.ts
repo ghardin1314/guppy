@@ -27,6 +27,7 @@ export interface LogEntry {
   threadId?: string;
   userId: string;
   userName: string;
+  userHandle?: string;
   text: string;
   isBot: boolean;
   attachments?: Array<{ original: string; local: string; mimeType?: string }>;

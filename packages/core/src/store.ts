@@ -39,10 +39,18 @@ function detectImageMime(buf: Buffer): string | undefined {
 
 export class Store {
   readonly dataDir: string;
-  private getAdapter: (name: string) => { name: string; channelIdFromThreadId?(threadId: string): string };
+  private getAdapter: (name: string) => {
+    name: string;
+    channelIdFromThreadId?(threadId: string): string;
+    fetchChannelInfo?(channelId: string): Promise<{ id: string; name?: string; isDM?: boolean }>;
+  };
 
   constructor(options: StoreOptions & {
-    getAdapter: (name: string) => { name: string; channelIdFromThreadId?(threadId: string): string };
+    getAdapter: (name: string) => {
+      name: string;
+      channelIdFromThreadId?(threadId: string): string;
+      fetchChannelInfo?(channelId: string): Promise<{ id: string; name?: string; isDM?: boolean }>;
+    };
   }) {
     this.dataDir = options.dataDir;
     this.getAdapter = options.getAdapter;
@@ -83,9 +91,12 @@ export class Store {
       threadId: compositeId,
       userId: message.author.userId,
       userName: message.author.fullName,
+      userHandle: message.author.userName,
       text: message.text,
       isBot: message.author.isBot === true || message.author.isMe,
     };
+
+    this.writeChannelMeta(compositeId);
 
     const attachmentEntries: Array<{ original: string; local: string; mimeType?: string }> = [];
     const downloads: Promise<void>[] = [];
@@ -237,9 +248,12 @@ export class Store {
       threadId: compositeId,
       userId: message.author.userId,
       userName: message.author.fullName,
+      userHandle: message.author.userName,
       text: message.text,
       isBot: message.author.isBot === true || message.author.isMe,
     };
+
+    this.writeChannelMeta(compositeId);
 
     const line = JSON.stringify(entry) + "\n";
     try {
@@ -269,6 +283,31 @@ export class Store {
       appendFileSync(join(chanDir, "log.jsonl"), line);
     } catch (err) {
       console.warn("Failed to append bot response to log.jsonl", err);
+    }
+  }
+
+  /** Write meta.json for the channel directory (fire-and-forget, once per channel). */
+  private writeChannelMeta(compositeId: string): void {
+    const chanDir = this.channelDir(compositeId);
+    const metaPath = join(chanDir, "meta.json");
+    if (existsSync(metaPath)) return;
+
+    const adapterName = adapterNameFrom(compositeId);
+    const adapter = this.getAdapter(adapterName);
+    const { channelKey } = this.resolve(compositeId);
+    const channelId = `${adapterName}:${channelKey}`;
+
+    // Write a minimal placeholder immediately so we don't re-enter
+    const placeholder = JSON.stringify({ id: channelId });
+    this.ensureDir(chanDir);
+    writeFileSync(metaPath, placeholder + "\n");
+
+    // Enrich with channel name async (fire-and-forget)
+    if (adapter.fetchChannelInfo) {
+      adapter.fetchChannelInfo(String(channelKey)).then((info) => {
+        const meta = { id: channelId, name: info.name, isDM: info.isDM };
+        writeFile(metaPath, JSON.stringify(meta) + "\n").catch(() => {});
+      }).catch(() => {});
     }
   }
 
