@@ -1,5 +1,5 @@
 import { createDiscordAdapter } from "@chat-adapter/discord";
-// import { createSlackAdapter } from "@chat-adapter/slack";
+import { createSlackAdapter } from "@chat-adapter/slack";
 import { createMemoryState } from "@chat-adapter/state-memory";
 import {
   Guppy,
@@ -28,7 +28,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const chat = new Chat({
   userName: BOT_NAME,
   adapters: {
-    // slack: createSlackAdapter(),
+    slack: createSlackAdapter(),
     discord: createDiscordAdapter(),
     // @guppy:adapters
   },
