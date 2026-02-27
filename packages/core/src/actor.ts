@@ -1,8 +1,13 @@
 import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
 import type { Api, ImageContent, Model } from "@mariozechner/pi-ai";
-import { RateLimitError } from "chat";
 import type { Message, SentMessage, Thread } from "chat";
-import { resolveCompactionSettings, runCompaction } from "./compaction";
+import { RateLimitError } from "chat";
+import {
+  estimateContextTokens,
+  resolveCompactionSettings,
+  runCompaction,
+  shouldCompact,
+} from "./compaction";
 import type { Store } from "./store";
 import type { ActorMessage, AgentFactory, Settings } from "./types";
 
@@ -16,7 +21,7 @@ function isTransportRetryable(err: unknown): boolean {
   // Network errors, 5xx from adapters
   if (err instanceof Error) {
     return /network|ECONNRESET|ETIMEDOUT|5\d{2}|service.?unavailable/i.test(
-      err.message
+      err.message,
     );
   }
   return false;
@@ -47,26 +52,31 @@ async function withTransportRetry<T>(fn: () => Promise<T>): Promise<T> {
   throw lastErr;
 }
 
+const CONTEXT_OVERFLOW_RE =
+  /context.?length|too long|token.?limit|prompt is too long|exceeds.*context/i;
+
+function isContextOverflow(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return CONTEXT_OVERFLOW_RE.test(msg);
+}
+
 // -- Descriptive error messages --
 
 const ERROR_PATTERNS: Array<{ test: RegExp; message: string }> = [
   {
     test: /rate.?limit|429|too many requests|quota/i,
-    message:
-      "I'm being rate-limited by my AI provider. Try again in a moment.",
+    message: "I'm being rate-limited by my AI provider. Try again in a moment.",
   },
   {
     test: /overloaded|503|service.?unavailable|capacity/i,
-    message:
-      "My AI provider is currently overloaded. Try again in a moment.",
+    message: "My AI provider is currently overloaded. Try again in a moment.",
   },
   {
     test: /timeout|timed?\s*out|ETIMEDOUT|ECONNRESET|network|connection/i,
-    message:
-      "I lost connection to my AI provider. Try again in a moment.",
+    message: "I lost connection to my AI provider. Try again in a moment.",
   },
   {
-    test: /context.?length|too long|token.?limit|prompt is too long|exceeds.*context/i,
+    test: CONTEXT_OVERFLOW_RE,
     message:
       "Our conversation is too long for me to process. Try starting a new thread.",
   },
@@ -76,7 +86,7 @@ const ERROR_PATTERNS: Array<{ test: RegExp; message: string }> = [
   },
 ];
 
-export { isTransportRetryable, describeError, withTransportRetry };
+export { describeError, isTransportRetryable, withTransportRetry };
 
 function describeError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
@@ -100,7 +110,10 @@ class RunMessage {
   private statusLines: string[] = [];
   private chain: Promise<void> = Promise.resolve();
 
-  constructor(private thread: Thread, existingMessage?: SentMessage) {
+  constructor(
+    private thread: Thread,
+    existingMessage?: SentMessage,
+  ) {
     if (existingMessage) {
       this.sentMessage = existingMessage;
       this.statusLines.push(existingMessage.text);
@@ -166,11 +179,11 @@ class RunMessage {
   private async editOrPost(display: string): Promise<void> {
     if (this.sentMessage) {
       this.sentMessage = await withTransportRetry(() =>
-        this.sentMessage!.edit(display)
+        this.sentMessage!.edit(display),
       );
     } else {
       this.sentMessage = await withTransportRetry(() =>
-        this.thread.post(display)
+        this.thread.post(display),
       );
     }
   }
@@ -231,7 +244,12 @@ export class Actor {
             .catch(() => {});
           return;
         }
-        this.queue.push({ text: msg.text, thread: msg.thread, message: msg.message, sentMessage: msg.sentMessage });
+        this.queue.push({
+          text: msg.text,
+          thread: msg.thread,
+          message: msg.message,
+          sentMessage: msg.sentMessage,
+        });
         if (!this.running) {
           this.drainQueue();
         }
@@ -268,42 +286,41 @@ export class Actor {
         const context = this.deps.store.loadContext(this.threadId);
         this.agent!.replaceMessages(context);
 
+        // Pre-prompt compaction: compact before prompting to avoid overflow
+        await this.tryCompact(msg);
+
         // Load image and file attachments from disk
         let promptText = item.text;
         let images: ImageContent[] | undefined;
 
         if (item.message?.attachments?.length) {
-          const att = this.deps.store.loadAttachments(this.threadId, item.message.id);
+          const att = this.deps.store.loadAttachments(
+            this.threadId,
+            item.message.id,
+          );
           if (att.images.length > 0) images = att.images;
           if (att.filePaths.length > 0) {
             promptText += `\n\n<attachments>\n${att.filePaths.join("\n")}\n</attachments>`;
           }
         }
 
-        await this.agent!.prompt(promptText, images);
-        this.deps.store.saveContext(this.threadId, this.agent!.state.messages);
-
-        // Compact if needed (non-fatal — raw context already saved)
-        if (this.deps.compaction) {
-          try {
-            const compactionSettings = resolveCompactionSettings(
-              this.deps.settings,
-              this.deps.compaction.model,
-            );
-            const compacted = await runCompaction(
-              this.agent!.state.messages,
-              compactionSettings,
-              this.deps.compaction.model,
-              this.deps.compaction.getApiKey,
-            );
-            if (compacted !== this.agent!.state.messages) {
-              this.agent!.replaceMessages(compacted);
-              this.deps.store.saveContext(this.threadId, compacted);
+        try {
+          await this.agent!.prompt(promptText, images);
+        } catch (err) {
+          // Overflow → compact and retry once
+          if (isContextOverflow(err) && this.deps.compaction) {
+            const didCompact = await this.tryCompact(msg, true);
+            if (didCompact) {
+              await this.agent!.prompt(promptText, images);
+            } else {
+              throw err;
             }
-          } catch (err) {
-            console.warn(`[Actor:${this.threadId}] compaction failed:`, err);
+          } else {
+            throw err;
           }
         }
+
+        this.deps.store.saveContext(this.threadId, this.agent!.state.messages);
 
         const finalText = this.extractFinalText();
 
@@ -362,7 +379,8 @@ export class Actor {
         break;
 
       case "tool_execution_start": {
-        const toolLabel = (event.args as { label?: string })?.label ?? event.toolName;
+        const toolLabel =
+          (event.args as { label?: string })?.label ?? event.toolName;
         msg.toolStart(toolLabel);
         break;
       }
@@ -384,6 +402,44 @@ export class Actor {
     }
   }
 
+  /**
+   * Run compaction if needed. Returns true if messages were compacted.
+   * When `force` is true, skips the threshold check (used after overflow).
+   */
+  private async tryCompact(msg: RunMessage, force = false): Promise<boolean> {
+    if (!this.deps.compaction || !this.agent) return false;
+    try {
+      const settings = resolveCompactionSettings(
+        this.deps.settings,
+        this.deps.compaction.model,
+      );
+      if (
+        !force &&
+        !shouldCompact(
+          estimateContextTokens(this.agent.state.messages),
+          settings,
+        )
+      ) {
+        return false;
+      }
+      msg.toolStart("Compacting context");
+      const compacted = await runCompaction(
+        this.agent.state.messages,
+        settings,
+        this.deps.compaction.model,
+        this.deps.compaction.getApiKey,
+      );
+      if (compacted !== this.agent.state.messages) {
+        this.agent.replaceMessages(compacted);
+        this.deps.store.saveContext(this.threadId, compacted);
+        return true;
+      }
+    } catch (err) {
+      console.warn(`[Actor:${this.threadId}] compaction failed:`, err);
+    }
+    return false;
+  }
+
   /** Extract final assistant text from the last assistant message in agent state */
   private extractFinalText(): string {
     const messages = this.agent?.state.messages;
@@ -395,13 +451,17 @@ export class Actor {
         if ("stopReason" in m && m.stopReason === "aborted") {
           return "_Stopped_";
         }
-        if ("stopReason" in m && m.stopReason === "error" && "errorMessage" in m) {
+        if (
+          "stopReason" in m &&
+          m.stopReason === "error" &&
+          "errorMessage" in m
+        ) {
           return describeError(new Error(m.errorMessage as string));
         }
         return (
           m.content
             .filter(
-              (c): c is { type: "text"; text: string } => c.type === "text"
+              (c): c is { type: "text"; text: string } => c.type === "text",
             )
             .map((c) => c.text)
             .join("") || "_No response_"
