@@ -401,6 +401,78 @@ describe("Actor", () => {
     });
   });
 
+  test("[SILENT] response deletes message instead of posting", async () => {
+      mockAgent.prompt = mock(() => {
+        for (const l of []) {} // no events needed
+        mockAgent._emit({ type: "agent_start" });
+        const assistantMsg: AgentMessage = {
+          role: "assistant",
+          content: [{ type: "text", text: "[SILENT]" }],
+          api: "anthropic",
+          provider: "anthropic",
+          model: "claude-3",
+          usage: {
+            input: 1,
+            output: 1,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: "stop",
+          timestamp: Date.now(),
+        };
+        mockAgent.state.messages.push(assistantMsg);
+      });
+
+      const actor = createActor();
+      const thread = createMockThread();
+
+      actor.receive({ type: "prompt", text: "periodic check", thread });
+      await settle();
+
+      // "Thinking" was posted, then deleted — no final text edit
+      expect(thread._posts.length).toBe(1); // initial "Thinking" post
+      const lastEdit = thread._edits[thread._edits.length - 1];
+      // Should NOT contain [SILENT] or any final text — only status edits
+      expect(lastEdit).not.toBe("[SILENT]");
+      expect(thread._edits.every((e) => !e.includes("[SILENT]"))).toBe(true);
+    });
+
+    test("[SILENT] response still saves context", async () => {
+      mockAgent.prompt = mock(() => {
+        mockAgent._emit({ type: "agent_start" });
+        const assistantMsg: AgentMessage = {
+          role: "assistant",
+          content: [{ type: "text", text: "[SILENT]" }],
+          api: "anthropic",
+          provider: "anthropic",
+          model: "claude-3",
+          usage: {
+            input: 1,
+            output: 1,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: "stop",
+          timestamp: Date.now(),
+        };
+        mockAgent.state.messages.push(assistantMsg);
+      });
+
+      const actor = createActor();
+      const thread = createMockThread();
+
+      actor.receive({ type: "prompt", text: "periodic check", thread });
+      await settle();
+
+      // Context should still be saved even though response was silent
+      const context = store.loadContext(THREAD_ID);
+      expect(context.length).toBeGreaterThan(0);
+    });
+
   test("destroy aborts agent", async () => {
     mockAgent.prompt = mock(
       async () => new Promise<void>((r) => setTimeout(r, 200))
