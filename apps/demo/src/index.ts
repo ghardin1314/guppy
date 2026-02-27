@@ -13,7 +13,7 @@ import {
 import { getModel } from "@mariozechner/pi-ai";
 import { Chat } from "chat";
 import { join } from "node:path";
-import { handleInspectRequest } from "./inspect";
+import { handleInspectRequest } from "./inspect/index";
 import { buildSystemPrompt } from "./system-prompt";
 
 // -- Config --
