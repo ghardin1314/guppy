@@ -177,13 +177,14 @@ class RunMessage {
   }
 
   private async editOrPost(display: string): Promise<void> {
+    const message = { markdown: display };
     if (this.sentMessage) {
       this.sentMessage = await withTransportRetry(() =>
-        this.sentMessage!.edit(display),
+        this.sentMessage!.edit(message),
       );
     } else {
       this.sentMessage = await withTransportRetry(() =>
-        this.thread.post(display),
+        this.thread.post(message),
       );
     }
   }

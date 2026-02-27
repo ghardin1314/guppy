@@ -84,6 +84,14 @@ function createMockAgent() {
  * Creates a mock SentMessage that tracks all edits in the shared `edits` array.
  * Each edit returns a new mock that also tracks into the same array.
  */
+/** Extract display text from a string or { markdown } postable */
+function textOf(msg: unknown): string {
+  if (typeof msg === "string") return msg;
+  if (msg && typeof msg === "object" && "markdown" in msg)
+    return (msg as { markdown: string }).markdown;
+  return String(msg);
+}
+
 function createTrackingSentMessage(
   initialText: string,
   edits: string[]
@@ -92,9 +100,10 @@ function createTrackingSentMessage(
     ({
       id: `msg-${Date.now()}`,
       text: t,
-      edit: mock(async (newContent: string) => {
-        edits.push(newContent);
-        return makeMock(newContent);
+      edit: mock(async (newContent: unknown) => {
+        const text = textOf(newContent);
+        edits.push(text);
+        return makeMock(text);
       }),
       delete: mock(async () => {}),
       addReaction: mock(async () => {}),
@@ -109,9 +118,10 @@ function createMockThread(): Thread & { _posts: string[]; _edits: string[] } {
   const thread = {
     _posts: posts,
     _edits: edits,
-    post: mock(async (message: string) => {
-      posts.push(message);
-      return createTrackingSentMessage(message, edits);
+    post: mock(async (message: unknown) => {
+      const text = textOf(message);
+      posts.push(text);
+      return createTrackingSentMessage(text, edits);
     }),
     startTyping: mock(async () => {}),
     id: "thread-1",
@@ -575,12 +585,12 @@ describe("Actor", () => {
       let postCount = 0;
       const thread = createMockThread();
       const originalPost = thread.post;
-      thread.post = mock(async (message: string) => {
+      thread.post = mock(async (message: unknown) => {
         postCount++;
         if (postCount === 1) {
           throw new RateLimitError("rate limited", 10);
         }
-        return (originalPost as (m: string) => Promise<SentMessage>)(message);
+        return (originalPost as (m: unknown) => Promise<SentMessage>)(message);
       }) as typeof thread.post;
 
       const actor = createActor();
@@ -597,22 +607,24 @@ describe("Actor", () => {
       const thread = createMockThread();
 
       // Override to inject a failing edit on first attempt
-      thread.post = mock(async (message: string) => {
-        thread._posts.push(message);
+      thread.post = mock(async (message: unknown) => {
+        const text = textOf(message);
+        thread._posts.push(text);
         const makeMock = (t: string): SentMessage =>
           ({
             id: `msg-${Date.now()}`,
             text: t,
-            edit: mock(async (newContent: string) => {
+            edit: mock(async (newContent: unknown) => {
               editAttempt++;
               if (editAttempt === 1) {
                 throw new RateLimitError("rate limited", 10);
               }
-              thread._edits.push(newContent);
-              return makeMock(newContent);
+              const nc = textOf(newContent);
+              thread._edits.push(nc);
+              return makeMock(nc);
             }),
           }) as unknown as SentMessage;
-        return makeMock(message);
+        return makeMock(text);
       }) as typeof thread.post;
 
       const actor = createActor();

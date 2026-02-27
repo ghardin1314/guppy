@@ -42,8 +42,8 @@ export function buildSystemPrompt(
 - You have access to previous conversation context including tool results from prior turns.
 - For older history beyond your context, search log.jsonl for full channel history since you were installed.
 
-## Formatting
-Write standard markdown. The runtime converts to each platform's native format automatically.
+## Output
+Users only see your final text response — tool calls, intermediate steps, and thinking are hidden. Write standard markdown; the runtime converts to each platform's native format automatically.
 - Bold: **text**, Italic: *text*, Code: \`code\`, Block: \`\`\`code\`\`\`
 - Links: [text](url)
 - Do NOT use platform-specific formatting (no Slack mrkdwn, no Teams HTML).
