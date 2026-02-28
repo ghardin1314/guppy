@@ -9,10 +9,12 @@
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
     "typecheck": "tsc --noEmit",
-    "test": "echo no tests"
+    "test": "bun test"
   },
   "dependencies": {
-    "@guppy/core": "workspace:*"
+    "@clack/prompts": "^1.0.1",
+    "@guppy/core": "workspace:*",
+    "@mariozechner/pi-ai": "^0.55.3"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

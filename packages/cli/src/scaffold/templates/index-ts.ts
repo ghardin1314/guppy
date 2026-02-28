@@ -1,0 +1,134 @@
+export interface IndexTsOpts {
+  botName: string;
+  provider: string;
+  modelId: string;
+}
+
+/** Returns the blank index.ts skeleton with markers (no transports wired). */
+export function generateIndexTs(opts: IndexTsOpts): string {
+  const { botName, provider, modelId } = opts;
+  return `// @guppy:adapter-imports
+import { createMemoryState } from "@chat-adapter/state-memory";
+import {
+  Guppy,
+  createBashTool,
+  createEditTool,
+  createReadTool,
+  createUploadTool,
+  createWriteTool,
+  createHostSandbox,
+} from "@guppy/core";
+import { getModel } from "@mariozechner/pi-ai";
+import { Chat } from "chat";
+import { join } from "node:path";
+import { handleInspectRequest } from "./inspect/index";
+import { buildSystemPrompt } from "./system-prompt";
+
+// -- Config --
+
+const DATA_DIR = join(import.meta.dir, "..", "data");
+const PORT = Number(process.env.PORT) || 80;
+const BOT_NAME = ${JSON.stringify(botName)};
+const BASE_URL = process.env.BASE_URL || \`http://localhost:\${PORT}\`;
+
+// -- Core wiring --
+
+const chat = new Chat({
+  userName: BOT_NAME,
+  adapters: {
+    // @guppy:adapters
+  },
+  state: createMemoryState(),
+});
+
+const sandbox = createHostSandbox(process.cwd());
+
+const guppy = new Guppy({
+  dataDir: DATA_DIR,
+  chat,
+  agent: {
+    model: getModel(${JSON.stringify(provider)}, ${JSON.stringify(modelId)}),
+    modelSettings: { thinkingLevel: "high" },
+    tools: [
+      createBashTool(sandbox),
+      createReadTool(sandbox.workspacePath),
+      createWriteTool(sandbox.workspacePath),
+      createEditTool(sandbox.workspacePath),
+      createUploadTool(sandbox.workspacePath, chat),
+    ],
+    systemPrompt: (ctx) => buildSystemPrompt(ctx, { dataDir: DATA_DIR, sandbox }),
+  },
+  baseUrl: BASE_URL,
+});
+
+// -- Chat handlers --
+
+chat.onNewMention(async (thread, message) => {
+  await thread.subscribe();
+  await guppy.logMessage(thread.id, message);
+  guppy.send(thread.id, {
+    type: "prompt",
+    text: message.text,
+    thread,
+    message,
+  });
+});
+
+chat.onSubscribedMessage(async (thread, message) => {
+  if (message.author.isMe) return;
+  await guppy.logMessage(thread.id, message);
+  guppy.send(thread.id, {
+    type: "prompt",
+    text: message.text,
+    thread,
+    message,
+  });
+});
+
+chat.onNewMessage(/.*/, (thread, message) => {
+  guppy.logPassiveMessage(thread.id, message);
+});
+
+chat.onSlashCommand(async (event) => {
+  guppy.handleSlashCommand(event);
+});
+
+chat.onReaction(["x"], (event) => {
+  if (event.added) guppy.abort(event.threadId);
+});
+
+await chat.initialize();
+// @guppy:gateway
+
+// -- HTTP server --
+
+const server = Bun.serve({
+  port: PORT,
+  routes: {
+    "/api/webhooks/*": async (request) => {
+      const adapter = request.url.split("/").pop();
+      if (!adapter) return new Response("Not Found", { status: 404 });
+      const handler = chat.webhooks[adapter as keyof typeof chat.webhooks];
+
+      if (!handler) return new Response("Not Found", { status: 404 });
+      return handler(request);
+    },
+    "/inspect/*": (req) => handleInspectRequest(req, guppy),
+  },
+});
+
+console.log(\`[\${BOT_NAME}] Server listening on http://localhost:\${server.port}\`);
+
+// -- Graceful shutdown --
+
+function shutdown() {
+  console.log(\`[\${BOT_NAME}] Shutting down...\`);
+  guppy.shutdown();
+  server.stop();
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+`;
+}
